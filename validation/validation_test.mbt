@@ -72,3 +72,109 @@ test "validate unnamed operations no duplicate" {
   let errors = @validation.validate(doc)
   assert_eq(errors.length(), 0)
 }
+
+///|
+test "validate_against_schema valid query" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String }
+  let query_input =
+    #|{ hero { name } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "validate_against_schema unknown field" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String }
+  let query_input =
+    #|{ hero { age } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0],
+    content=(
+      #|Field "age" is not defined on type "Hero"
+    ),
+  )
+}
+
+///|
+test "validate_against_schema missing required argument" {
+  let schema_input =
+    #|type Query { user(id: ID!): User }
+    #|type User { name: String }
+  let query_input =
+    #|{ user { name } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0],
+    content=(
+      #|Missing required argument "id" on field "user"
+    ),
+  )
+}
+
+///|
+test "validate_against_schema optional argument ok" {
+  let schema_input =
+    #|type Query { users(limit: Int = 10): User }
+    #|type User { name: String }
+  let query_input =
+    #|{ users { name } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "validate_against_schema with schema definition" {
+  let schema_input =
+    #|schema { query: RootQuery }
+    #|type RootQuery { hello: String }
+  let query_input =
+    #|{ hello }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "validate_against_schema __typename is allowed" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String }
+  let query_input =
+    #|{ hero { __typename name } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "validate_against_schema nested field check" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String friends: [Hero] }
+  let query_input =
+    #|{ hero { friends { badField } } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0],
+    content=(
+      #|Field "badField" is not defined on type "Hero"
+    ),
+  )
+}
