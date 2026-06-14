@@ -1,3 +1,7 @@
 import {
   "Eisem/moon_graphql/ast",
 }
+
+import {
+  "Eisem/moon_graphql/parser",
+} for "test"
