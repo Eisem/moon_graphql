@@ -167,6 +167,17 @@ fn Parser::parse_definition(
       @ast.Definition::Operation(self.parse_operation())
     Name("fragment") => @ast.Definition::Fragment(self.parse_fragment())
     LBrace => @ast.Definition::Operation(self.parse_operation())
+    Name("type")
+    | Name("interface")
+    | Name("union")
+    | Name("enum")
+    | Name("input")
+    | Name("scalar")
+    | Name("schema")
+    | Name("directive")
+    | StringValue(_)
+    | BlockString(_) =>
+      @ast.Definition::SchemaType(self.parse_type_system_def())
     _ => {
       let loc = self.peek_loc()
       raise @ast.ParseError::UnexpectedToken(
