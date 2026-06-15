@@ -13,6 +13,7 @@ moon add Eisem/moon_graphql
 ### Parse a Query
 
 ```mbt check
+///|
 test "parse query example" {
   let input =
     #|query HeroQuery($id: ID!) {
@@ -28,6 +29,7 @@ test "parse query example" {
 ### Parse a Schema
 
 ```mbt check
+///|
 test "parse schema example" {
   let input =
     #|type Query {
@@ -45,6 +47,7 @@ test "parse schema example" {
 ### Print AST
 
 ```mbt check
+///|
 test "print AST example" {
   let doc = @parser.parse("{ hero { name } }")
   let output = @printer.print(doc)
@@ -64,6 +67,7 @@ test "print AST example" {
 ### Validate a Query
 
 ```mbt check
+///|
 test "validate example" {
   let doc = @parser.parse("{ hero { ...missing } }")
   let errors = @validation.validate(doc)
@@ -74,6 +78,7 @@ test "validate example" {
 ### Validate Against a Schema
 
 ```mbt check
+///|
 test "validate against schema example" {
   let schema_input =
     #|type Query { hero: Hero }

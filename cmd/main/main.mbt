@@ -24,9 +24,7 @@ fn main {
     #|  JEDI
     #|}
   println("--- Parsing query ---")
-  let query_doc = try {
-    @parser.parse(query_str)
-  } catch {
+  let query_doc = @parser.parse(query_str) catch {
     err => {
       println("Parse error: \{err}")
       return
@@ -34,9 +32,7 @@ fn main {
   }
   println("Query parsed successfully.\n")
   println("--- Parsing schema ---")
-  let schema_doc = try {
-    @parser.parse(schema_str)
-  } catch {
+  let schema_doc = @parser.parse(schema_str) catch {
     err => {
       println("Parse error: \{err}")
       return

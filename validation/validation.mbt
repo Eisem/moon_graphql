@@ -195,9 +195,7 @@ fn build_type_fields(
 }
 
 ///|
-fn find_root_types(
-  schema : @ast.Document,
-) -> (String?, String?, String?) {
+fn find_root_types(schema : @ast.Document) -> (String?, String?, String?) {
   let mut query : String? = None
   let mut mutation : String? = None
   let mut subscription : String? = None
@@ -253,7 +251,10 @@ fn validate_selections_on_type(
         if !field.selections.is_empty() {
           if inner_type is Some(it) {
             validate_selections_on_type(
-              field.selections, it, type_fields, errors,
+              field.selections,
+              it,
+              type_fields,
+              errors,
             )
           }
         }

@@ -115,19 +115,13 @@ test "validation missing required arg" {
 
 ///|
 test "error handling malformed query" {
-  let result = try {
-    Ok(@parser.parse("{ hero { }"))
-  } catch {
-    _ => Err("parse error")
-  }
+  let result = Ok(@parser.parse("{ hero { }")) catch { _ => Err("parse error") }
   assert_true(result is Err(_))
 }
 
 ///|
 test "error handling unterminated string" {
-  let result = try {
-    Ok(@parser.parse("{ hero(name: \"unclosed) }"))
-  } catch {
+  let result = Ok(@parser.parse("{ hero(name: \"unclosed) }")) catch {
     _ => Err("parse error")
   }
   assert_true(result is Err(_))
