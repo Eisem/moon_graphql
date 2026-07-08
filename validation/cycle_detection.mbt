@@ -1,6 +1,6 @@
 ///|
-pub fn detect_fragment_cycles(doc : @ast.Document) -> Array[String] {
-  let errors : Array[String] = []
+pub fn detect_fragment_cycles(doc : @ast.Document) -> Array[ValidationError] {
+  let errors : Array[ValidationError] = []
   let fragment_map : Map[String, @ast.FragmentDef] = {}
   for def in doc.definitions {
     match def {
@@ -24,7 +24,7 @@ fn detect_cycle(
   fragment_map : Map[String, @ast.FragmentDef],
   visited : Map[String, Bool],
   in_stack : Map[String, Bool],
-  errors : Array[String],
+  errors : Array[ValidationError],
 ) -> Unit {
   visited[name] = true
   in_stack[name] = true
@@ -33,9 +33,10 @@ fn detect_cycle(
       let spreads = collect_fragment_spreads(frag.selections)
       for spread_name in spreads {
         if in_stack.contains(spread_name) {
-          errors.push(
-            "Fragment cycle detected: '\{name}' references '\{spread_name}' which creates a cycle",
-          )
+          errors.push({
+            message: "Fragment cycle detected: '\{name}' references '\{spread_name}' which creates a cycle",
+            ty: "error",
+          })
         } else if !visited.contains(spread_name) {
           detect_cycle(spread_name, fragment_map, visited, in_stack, errors)
         }

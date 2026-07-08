@@ -1,0 +1,47 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Eisem/moon_graphql/lexer"
+
+import {
+  "Eisem/moon_graphql/ast",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn tokenize(String) -> Array[Token] raise @ast.ParseError
+
+// Errors
+
+// Types and methods
+pub(all) struct Token {
+  kind : TokenKind
+  loc : @ast.Location
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TokenKind {
+  Bang
+  Dollar
+  Amp
+  LParen
+  RParen
+  Spread
+  Colon
+  Equals
+  At
+  LBracket
+  RBracket
+  LBrace
+  Pipe
+  RBrace
+  Name(String)
+  IntValue(String)
+  FloatValue(String)
+  StringValue(String)
+  BlockString(String)
+  Eof
+} derive(Eq, @debug.Debug)
+pub impl Show for TokenKind
+
+// Type aliases
+
+// Traits
+

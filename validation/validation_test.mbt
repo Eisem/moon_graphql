@@ -13,7 +13,7 @@ test "validate duplicate fragment names" {
     #|fragment f on Villain { name }
   let doc = @parser.parse(input)
   let errors = @validation.validate(doc)
-  inspect(errors[0], content="Duplicate fragment name: f")
+  inspect(errors[0].message(), content="Duplicate fragment name: f")
 }
 
 ///|
@@ -22,7 +22,7 @@ test "validate undefined fragment spread" {
     #|{ hero { ...missingFrag } }
   let doc = @parser.parse(input)
   let errors = @validation.validate(doc)
-  inspect(errors[0], content="Undefined fragment: missingFrag")
+  inspect(errors[0].message(), content="Undefined fragment: missingFrag")
 }
 
 ///|
@@ -32,7 +32,7 @@ test "validate duplicate operation names" {
     #|query Foo { villain { name } }
   let doc = @parser.parse(input)
   let errors = @validation.validate(doc)
-  inspect(errors[0], content="Duplicate operation name: Foo")
+  inspect(errors[0].message(), content="Duplicate operation name: Foo")
 }
 
 ///|
@@ -41,7 +41,7 @@ test "validate undefined variable" {
     #|query { hero(id: $missing) { name } }
   let doc = @parser.parse(input)
   let errors = @validation.validate(doc)
-  inspect(errors[0], content="Undefined variable: $missing")
+  inspect(errors[0].message(), content="Undefined variable: $missing")
 }
 
 ///|
@@ -97,7 +97,7 @@ test "validate_against_schema unknown field" {
   let doc = @parser.parse(query_input)
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
-    errors[0],
+    errors[0].message(),
     content=(
       #|Field "age" is not defined on type "Hero"
     ),
@@ -115,7 +115,7 @@ test "validate_against_schema missing required argument" {
   let doc = @parser.parse(query_input)
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
-    errors[0],
+    errors[0].message(),
     content=(
       #|Missing required argument "id" on field "user"
     ),
@@ -172,9 +172,36 @@ test "validate_against_schema nested field check" {
   let doc = @parser.parse(query_input)
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
-    errors[0],
+    errors[0].message(),
     content=(
       #|Field "badField" is not defined on type "Hero"
     ),
   )
+}
+
+///|
+test "validate leaf field no sub-selections on scalar" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String friends: [Hero] }
+  let query_input =
+    #|{ hero { name { first } } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_true(errors.length() > 0)
+}
+
+///|
+test "validate leaf field no sub-selections on enum" {
+  let schema_input =
+    #|type Query { hero: Hero }
+    #|type Hero { name: String episode: Episode }
+    #|enum Episode { NEWHOPE EMPIRE JEDI }
+  let query_input =
+    #|{ hero { episode { name } } }
+  let schema = @parser.parse(schema_input)
+  let doc = @parser.parse(query_input)
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_true(errors.length() > 0)
 }

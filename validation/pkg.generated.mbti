@@ -1,0 +1,30 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Eisem/moon_graphql/validation"
+
+import {
+  "Eisem/moon_graphql/ast",
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn detect_fragment_cycles(@ast.Document) -> Array[ValidationError]
+
+pub fn validate(@ast.Document) -> Array[ValidationError]
+
+pub fn validate_against_schema(@ast.Document, @ast.Document) -> Array[ValidationError]
+
+// Errors
+
+// Types and methods
+pub struct ValidationError {
+  message : String
+  ty : String
+} derive(Eq, @debug.Debug)
+pub fn ValidationError::is_error(Self) -> Bool
+pub fn ValidationError::is_warning(Self) -> Bool
+pub fn ValidationError::message(Self) -> String
+
+// Type aliases
+
+// Traits
+

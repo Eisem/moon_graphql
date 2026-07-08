@@ -46,7 +46,7 @@ fn main {
   } else {
     println("Validation errors:")
     for err in errors {
-      println("  - \{err}")
+      println("  - \{err.message()}")
     }
     println("")
   }

@@ -18,13 +18,13 @@ jobs:
           echo "$HOME/.moon/bin" >> $GITHUB_PATH
 
       - name: Check
-        run: moon check
-
-      - name: Build
-        run: moon build
-
-      - name: Test
-        run: moon test
+        run: moon check --deny-warn
 
       - name: Format check
         run: moon fmt --check
+
+      - name: Info
+        run: moon info
+
+      - name: Test
+        run: moon test

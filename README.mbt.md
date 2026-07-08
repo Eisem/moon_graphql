@@ -116,6 +116,14 @@ test "validate against schema example" {
 - Variable definition checks
 - Field existence on types (schema-aware)
 - Required argument checking (schema-aware)
+- Leaf field selection checks (scalars, enums, unions, input types)
+- Structured error types with error/warning classification
+
+### Error Reporting
+- Parse errors with line/column location information
+- Validation errors as structured `ValidationError` types
+  - `message()` - human-readable error description
+  - `is_error()` / `is_warning()` - error severity check
 
 ## Project Structure
 
@@ -125,7 +133,7 @@ moon_graphql/
   lexer/         - Tokenizer
   parser/        - Query and schema parsers
   printer/       - AST to GraphQL text
-  validation/    - Document and schema validation
+  validation/    - Document and schema validation (including cycle detection)
   integration/   - Integration tests
   cmd/main/      - CLI demo
 ```

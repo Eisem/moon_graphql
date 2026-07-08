@@ -140,7 +140,7 @@ fn Lexer::read_name(self : Lexer, start_loc : @ast.Location) -> Token {
 }
 
 ///|
-fn Lexer::read_number(self : Lexer) -> Token raise @ast.ParseError {
+fn Lexer::read_number(self : Lexer) -> Token {
   let start_loc : @ast.Location = { line: self.line, col: self.col }
   let start = self.pos
   let mut is_float = false

@@ -1,0 +1,228 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Eisem/moon_graphql/ast"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+
+// Errors
+pub(all) suberror ParseError {
+  UnexpectedChar(char~ : Char, loc~ : Location)
+  UnterminatedString(loc~ : Location)
+  UnexpectedToken(expected~ : String, got~ : String, loc~ : Location)
+  UnexpectedEof(expected~ : String)
+  InvalidNumber(text~ : String, loc~ : Location)
+  InvalidSyntax(message~ : String, loc~ : Location)
+}
+pub impl Show for ParseError
+
+// Types and methods
+pub(all) struct Argument {
+  name : String
+  value : Value
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Definition {
+  Operation(OperationDef)
+  Fragment(FragmentDef)
+  SchemaType(TypeSystemDef)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Directive {
+  name : String
+  arguments : Array[Argument]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct DirectiveDef {
+  description : String?
+  name : String
+  arguments : Array[InputValueDef]
+  repeatable : Bool
+  locations : Array[String]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Document {
+  definitions : Array[Definition]
+} derive(Eq, @debug.Debug)
+pub fn Document::fragments(Self) -> Array[FragmentDef]
+pub fn Document::operations(Self) -> Array[OperationDef]
+pub fn Document::type_defs(Self) -> Array[TypeSystemDef]
+
+pub(all) struct EnumTypeDef {
+  description : String?
+  name : String
+  directives : Array[Directive]
+  values : Array[EnumValueDef]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct EnumValueDef {
+  description : String?
+  name : String
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FieldDef {
+  description : String?
+  name : String
+  arguments : Array[InputValueDef]
+  field_type : TypeRef
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FieldNode {
+  field_alias : String?
+  name : String
+  arguments : Array[Argument]
+  directives : Array[Directive]
+  selections : Array[Selection]
+} derive(Eq, @debug.Debug)
+pub fn FieldNode::has_arguments(Self) -> Bool
+pub fn FieldNode::has_selections(Self) -> Bool
+
+pub(all) struct FragmentDef {
+  name : String
+  type_condition : String
+  directives : Array[Directive]
+  selections : Array[Selection]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct FragmentSpreadNode {
+  name : String
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InlineFragmentNode {
+  type_condition : String?
+  directives : Array[Directive]
+  selections : Array[Selection]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InputObjectTypeDef {
+  description : String?
+  name : String
+  directives : Array[Directive]
+  fields : Array[InputValueDef]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InputValueDef {
+  description : String?
+  name : String
+  input_type : TypeRef
+  default_value : Value?
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct InterfaceTypeDef {
+  description : String?
+  name : String
+  interfaces : Array[String]
+  directives : Array[Directive]
+  fields : Array[FieldDef]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct Location {
+  line : Int
+  col : Int
+} derive(Eq, @debug.Debug)
+pub impl Show for Location
+
+pub(all) struct ObjectTypeDef {
+  description : String?
+  name : String
+  interfaces : Array[String]
+  directives : Array[Directive]
+  fields : Array[FieldDef]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct OperationDef {
+  operation : OperationType
+  name : String?
+  variables : Array[VariableDef]
+  directives : Array[Directive]
+  selections : Array[Selection]
+} derive(Eq, @debug.Debug)
+pub fn OperationDef::has_directives(Self) -> Bool
+pub fn OperationDef::has_variables(Self) -> Bool
+
+pub(all) enum OperationType {
+  Query
+  Mutation
+  Subscription
+} derive(Eq, @debug.Debug)
+
+pub(all) struct ScalarTypeDef {
+  description : String?
+  name : String
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+pub(all) struct SchemaDef {
+  directives : Array[Directive]
+  query : String?
+  mutation : String?
+  subscription : String?
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Selection {
+  Field(FieldNode)
+  FragmentSpread(FragmentSpreadNode)
+  InlineFragment(InlineFragmentNode)
+} derive(Eq, @debug.Debug)
+
+pub(all) enum TypeRef {
+  Named(String)
+  List(TypeRef)
+  NonNull(TypeRef)
+} derive(Eq, @debug.Debug)
+pub fn TypeRef::is_list(Self) -> Bool
+pub fn TypeRef::is_non_null(Self) -> Bool
+pub fn TypeRef::name(Self) -> String
+
+pub(all) enum TypeSystemDef {
+  SchemaDefinition(SchemaDef)
+  ScalarType(ScalarTypeDef)
+  ObjectType(ObjectTypeDef)
+  InterfaceType(InterfaceTypeDef)
+  UnionType(UnionTypeDef)
+  EnumType(EnumTypeDef)
+  InputObjectType(InputObjectTypeDef)
+  DirectiveDefinition(DirectiveDef)
+} derive(Eq, @debug.Debug)
+
+pub(all) struct UnionTypeDef {
+  description : String?
+  name : String
+  directives : Array[Directive]
+  members : Array[String]
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Value {
+  IntVal(Int)
+  FloatVal(Double)
+  StringVal(String)
+  BoolVal(Bool)
+  NullVal
+  EnumVal(String)
+  ListVal(Array[Value])
+  ObjectVal(Array[(String, Value)])
+  Variable(String)
+} derive(Eq, @debug.Debug)
+pub fn Value::as_bool(Self) -> Bool?
+pub fn Value::as_int(Self) -> Int?
+pub fn Value::as_list(Self) -> Array[Self]?
+pub fn Value::as_string(Self) -> String?
+pub fn Value::is_null(Self) -> Bool
+
+pub(all) struct VariableDef {
+  name : String
+  var_type : TypeRef
+  default_value : Value?
+  directives : Array[Directive]
+} derive(Eq, @debug.Debug)
+
+// Type aliases
+
+// Traits
+
