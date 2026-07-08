@@ -1,11 +1,11 @@
-# Eisem/moon_graphql
+# eisem/moon_graphql
 
 A GraphQL parser, validator, and printer toolkit for MoonBit.
 
 ## Installation
 
 ```sh
-moon add Eisem/moon_graphql
+moon add eisem/moon_graphql
 ```
 
 ## Quick Start

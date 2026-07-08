@@ -1,4 +1,4 @@
 import {
-  "Eisem/moon_graphql/ast",
-  "Eisem/moon_graphql/lexer",
+  "eisem/moon_graphql/ast",
+  "eisem/moon_graphql/lexer",
 }

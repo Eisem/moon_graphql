@@ -1,5 +1,5 @@
 import {
-  "Eisem/moon_graphql/parser",
-  "Eisem/moon_graphql/printer",
-  "Eisem/moon_graphql/validation",
+  "eisem/moon_graphql/parser",
+  "eisem/moon_graphql/printer",
+  "eisem/moon_graphql/validation",
 } for "test"

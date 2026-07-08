@@ -1,4 +1,4 @@
-name = "Eisem/moon_graphql"
+name = "eisem/moon_graphql"
 
 version = "0.1.0"
 

@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "Eisem/moon_graphql"
+package "eisem/moon_graphql"
 
 // Values
 pub fn version() -> String
