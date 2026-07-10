@@ -94,6 +94,13 @@ test "validate against schema example" {
 
 ## Supported Features
 
+### Lexical Grammar
+- Strict GraphQL integer, float, exponent, and number-termination rules
+- Standard quoted-string escapes and Unicode surrogate pairs
+- Rejection of invalid escapes and raw line/control characters
+- Block string escaped triple quotes, newline normalization, and common-indent removal
+- Cross-platform CR/LF/CRLF location tracking and BOM handling
+
 ### Query Language
 - Operations: query, mutation, subscription
 - Named and anonymous operations

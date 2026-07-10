@@ -16,8 +16,8 @@ Status meanings:
 | Value and type syntax | Supported | Scalars, enum values, null, lists, input objects, variables, list/non-null type references |
 | Type-system definitions | Supported | Schema, scalar, object, interface, union, enum, input object, and directive definitions |
 | Type-system extensions | Not implemented | `extend schema`, `extend type`, and the other SDL extension forms are not represented in the AST |
-| String lexical semantics | Partial | Common escapes and block strings parse; Unicode escape decoding, invalid-escape rejection, and block-string value normalization are incomplete |
-| Number lexical semantics | Partial | Integer, float, and exponent forms parse; every invalid GraphQL numeric spelling is not yet rejected lexically |
+| String lexical semantics | Supported | Standard escapes, BMP/surrogate-pair Unicode escapes, invalid-escape rejection, raw line/control checks, escaped triple quotes, and BlockStringValue normalization |
+| Number lexical semantics | Supported | Integer, fraction, exponent, leading-zero, required-digit, and token-termination rules are enforced |
 | AST printer | Supported | Executable and SDL definitions round-trip through parse → print → parse; comments and original whitespace are intentionally not preserved |
 
 ## Validation support
@@ -42,7 +42,7 @@ The project is a GraphQL language toolkit, not a GraphQL server runtime. Executi
 
 ## Test provenance
 
-The focused cases in `validation/conformance_test.mbt` are original minimal fixtures derived from specification behavior. No test fixture or implementation source was copied from `graphql-js` or other GraphQL libraries. Run all checks with:
+The focused cases in `lexer/conformance_test.mbt` and `validation/conformance_test.mbt` are original minimal fixtures derived from specification behavior. No test fixture or implementation source was copied from `graphql-js` or other GraphQL libraries. Run all checks with:
 
 ```sh
 moon check --deny-warn
