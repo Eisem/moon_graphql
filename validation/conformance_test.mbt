@@ -212,3 +212,123 @@ test "conformance: fragment variable usage belongs to the operation" {
   let errors = @validation.validate(doc)
   inspect(errors[0].message(), content="Undefined variable: $enabled")
 }
+
+///|
+test "conformance: field rejects unknown arguments" {
+  let schema = @parser.parse("type Query { user(id: ID): String }")
+  let doc = @parser.parse("{ user(name: \"Ada\") }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Unknown argument "name" on field "user"
+    ),
+  )
+}
+
+///|
+test "conformance: field argument names are unique" {
+  let schema = @parser.parse("type Query { user(id: ID): String }")
+  let doc = @parser.parse("{ user(id: 1, id: 2) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Duplicate argument "id" on field "user"
+    ),
+  )
+}
+
+///|
+test "conformance: built-in include directive is valid on fields" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse(
+    "query Demo($enabled: Boolean!) { greeting @include(if: $enabled) }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "conformance: unknown directives are rejected" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse("{ greeting @unknown }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(errors[0].message(), content="Unknown directive \"@unknown\"")
+}
+
+///|
+test "conformance: directive locations are enforced" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse("query Demo @include(if: true) { greeting }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Directive "@include" is not allowed at location "QUERY"
+    ),
+  )
+}
+
+///|
+test "conformance: non-repeatable directives cannot repeat" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse("{ greeting @skip(if: true) @skip(if: false) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Directive "@skip" is not repeatable at location "FIELD"
+    ),
+  )
+}
+
+///|
+test "conformance: directive required arguments are enforced" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse("{ greeting @include }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Missing required argument "if" on directive "@include"
+    ),
+  )
+}
+
+///|
+test "conformance: directive arguments must be known and unique" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse(
+    "{ greeting @include(if: true, extra: false, if: false) }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 2)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Unknown argument "extra" on directive "@include"
+    ),
+  )
+  inspect(
+    errors[1].message(),
+    content=(
+      #|Duplicate argument "if" on directive "@include"
+    ),
+  )
+}
+
+///|
+test "conformance: custom repeatable directives use schema definitions" {
+  let schema = @parser.parse(
+    (
+      #|directive @tag(name: String!) repeatable on FIELD
+      #|type Query { greeting: String }
+    ),
+  )
+  let doc = @parser.parse(
+    "{ greeting @tag(name: \"one\") @tag(name: \"two\") }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}

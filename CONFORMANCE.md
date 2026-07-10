@@ -30,9 +30,9 @@ Status meanings:
 | Field existence | Partial | Object/interface fields and fields inside named/inline fragments are checked; field merging and type-overlap rules remain |
 | Leaf/composite selection shape | Supported | Leaf fields reject sub-selections; object/interface/union fields require them |
 | Union selections | Supported | `__typename` and type-conditioned fragments are accepted; direct member-field selection is rejected |
-| Required arguments | Partial | Missing required field arguments are rejected; unknown, duplicate, and value-coercion checks remain |
+| Field arguments | Partial | Missing required, unknown, and duplicate arguments are rejected; literal value coercion remains |
 | Fragment type conditions | Partial | Unknown and non-composite conditions are rejected; possible-type overlap checks remain |
-| Directives | Not implemented | Known locations, repeatability, required arguments, and uniqueness are not validated |
+| Directives | Partial | October 2021 built-ins and schema-defined directives are checked for name, executable location, repeatability, and arguments; argument value coercion and SDL directive validation remain |
 | Input coercion and variable compatibility | Not implemented | Literal/input-object coercion and variable-position compatibility remain |
 | Schema validation | Not implemented | Type uniqueness, interface implementation, union members, input/output positions, and root-type validation remain |
 

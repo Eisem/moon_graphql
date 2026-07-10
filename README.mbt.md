@@ -119,14 +119,15 @@ test "validate against schema example" {
 - Lone anonymous operation checks
 - Unique variable names and undefined-variable checks across directives/fragments
 - Field existence on types (schema-aware)
-- Required argument checking (schema-aware)
+- Field argument uniqueness, existence, and required-argument checks
+- Built-in and schema-defined Directive name, location, repeatability, and argument checks
 - Leaf/composite field selection checks
 - Named and inline fragment field validation
 - Union selections through type-conditioned fragments
 - Fragment type-condition checks
 - Structured error types with error/warning classification
 
-Validation is intentionally incremental and does not yet implement every executable-document or schema rule from the GraphQL specification. In particular, directive validation, complete variable compatibility/input coercion, field merging, possible-type overlap, and schema validation remain. See [GraphQL conformance](CONFORMANCE.md).
+Validation is intentionally incremental and does not yet implement every executable-document or schema rule from the GraphQL specification. In particular, argument value coercion, complete variable compatibility/input coercion, field merging, possible-type overlap, and schema validation remain. See [GraphQL conformance](CONFORMANCE.md).
 
 ### Error Reporting
 - Parse errors with line/column location information

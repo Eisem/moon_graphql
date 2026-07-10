@@ -280,6 +280,7 @@ fn check_variables_in_value(
 priv struct SchemaInfo {
   object_fields : Map[String, Array[@ast.FieldDef]]
   has_type : Map[String, String]
+  directive_defs : Map[String, @ast.DirectiveDef]
 }
 
 ///|
@@ -293,9 +294,72 @@ fn is_leaf_kind(kind : String) -> Bool {
 }
 
 ///|
+fn builtin_directive_definitions() -> Array[@ast.DirectiveDef] {
+  let required_boolean : @ast.InputValueDef = {
+    description: None,
+    name: "if",
+    input_type: NonNull(Named("Boolean")),
+    default_value: None,
+    directives: [],
+  }
+  [
+    {
+      description: None,
+      name: "skip",
+      arguments: [required_boolean],
+      repeatable: false,
+      locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"],
+    },
+    {
+      description: None,
+      name: "include",
+      arguments: [required_boolean],
+      repeatable: false,
+      locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"],
+    },
+    {
+      description: None,
+      name: "deprecated",
+      arguments: [
+        {
+          description: None,
+          name: "reason",
+          input_type: Named("String"),
+          default_value: Some(StringVal("No longer supported")),
+          directives: [],
+        },
+      ],
+      repeatable: false,
+      locations: [
+        "FIELD_DEFINITION", "ARGUMENT_DEFINITION", "INPUT_FIELD_DEFINITION", "ENUM_VALUE",
+      ],
+    },
+    {
+      description: None,
+      name: "specifiedBy",
+      arguments: [
+        {
+          description: None,
+          name: "url",
+          input_type: NonNull(Named("String")),
+          default_value: None,
+          directives: [],
+        },
+      ],
+      repeatable: false,
+      locations: ["SCALAR"],
+    },
+  ]
+}
+
+///|
 fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
   let object_fields : Map[String, Array[@ast.FieldDef]] = {}
   let has_type : Map[String, String] = {}
+  let directive_defs : Map[String, @ast.DirectiveDef] = {}
+  for directive in builtin_directive_definitions() {
+    directive_defs[directive.name] = directive
+  }
   let builtin_scalars = ["String", "Int", "Float", "Boolean", "ID"]
   for s in builtin_scalars {
     has_type[s] = "scalar"
@@ -322,11 +386,12 @@ fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
         EnumType(e) => has_type[e.name] = "enum"
         ScalarType(s) => has_type[s.name] = "scalar"
         InputObjectType(i) => has_type[i.name] = "input-object"
+        DirectiveDefinition(d) => directive_defs[d.name] = d
         _ => ()
       }
     }
   }
-  { object_fields, has_type }
+  { object_fields, has_type, directive_defs }
 }
 
 ///|
@@ -336,6 +401,7 @@ pub fn validate_against_schema(
 ) -> Array[ValidationError] {
   let errors = validate(doc)
   let schema_info = build_schema_info(schema)
+  validate_document_directives(doc, schema_info, errors)
   let root_types = find_root_types(schema)
   let fragments : Map[String, @ast.FragmentDef] = {}
   for def in doc.definitions {
@@ -373,6 +439,168 @@ pub fn validate_against_schema(
     )
   }
   errors
+}
+
+///|
+fn validate_document_directives(
+  doc : @ast.Document,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  for def in doc.definitions {
+    match def {
+      Operation(operation) => {
+        let location = match operation.operation {
+          Query => "QUERY"
+          Mutation => "MUTATION"
+          Subscription => "SUBSCRIPTION"
+        }
+        validate_directive_list(
+          operation.directives,
+          location,
+          schema_info,
+          errors,
+        )
+        for variable in operation.variables {
+          validate_directive_list(
+            variable.directives,
+            "VARIABLE_DEFINITION",
+            schema_info,
+            errors,
+          )
+        }
+        validate_directives_in_selections(
+          operation.selections,
+          schema_info,
+          errors,
+        )
+      }
+      Fragment(fragment) => {
+        validate_directive_list(
+          fragment.directives,
+          "FRAGMENT_DEFINITION",
+          schema_info,
+          errors,
+        )
+        validate_directives_in_selections(
+          fragment.selections,
+          schema_info,
+          errors,
+        )
+      }
+      SchemaType(_) => ()
+    }
+  }
+}
+
+///|
+fn validate_directives_in_selections(
+  selections : Array[@ast.Selection],
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  for selection in selections {
+    match selection {
+      Field(field) => {
+        validate_directive_list(field.directives, "FIELD", schema_info, errors)
+        validate_directives_in_selections(field.selections, schema_info, errors)
+      }
+      FragmentSpread(spread) =>
+        validate_directive_list(
+          spread.directives,
+          "FRAGMENT_SPREAD",
+          schema_info,
+          errors,
+        )
+      InlineFragment(fragment) => {
+        validate_directive_list(
+          fragment.directives,
+          "INLINE_FRAGMENT",
+          schema_info,
+          errors,
+        )
+        validate_directives_in_selections(
+          fragment.selections,
+          schema_info,
+          errors,
+        )
+      }
+    }
+  }
+}
+
+///|
+fn validate_directive_list(
+  directives : Array[@ast.Directive],
+  location : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for directive in directives {
+    match schema_info.directive_defs.get(directive.name) {
+      None =>
+        errors.push({
+          message: "Unknown directive \"@\{directive.name}\"",
+          ty: "error",
+        })
+      Some(definition) => {
+        let mut allowed = false
+        for allowed_location in definition.locations {
+          if allowed_location == location {
+            allowed = true
+            break
+          }
+        }
+        if !allowed {
+          errors.push({
+            message: "Directive \"@\{directive.name}\" is not allowed at location \"\{location}\"",
+            ty: "error",
+          })
+        }
+        if seen.contains(directive.name) && !definition.repeatable {
+          errors.push({
+            message: "Directive \"@\{directive.name}\" is not repeatable at location \"\{location}\"",
+            ty: "error",
+          })
+        }
+        validate_directive_arguments(directive, definition, errors)
+      }
+    }
+    seen[directive.name] = true
+  }
+}
+
+///|
+fn validate_directive_arguments(
+  directive : @ast.Directive,
+  definition : @ast.DirectiveDef,
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for argument in directive.arguments {
+    if seen.contains(argument.name) {
+      errors.push({
+        message: "Duplicate argument \"\{argument.name}\" on directive \"@\{directive.name}\"",
+        ty: "error",
+      })
+    }
+    seen[argument.name] = true
+    if find_input_value_def(definition.arguments, argument.name) is None {
+      errors.push({
+        message: "Unknown argument \"\{argument.name}\" on directive \"@\{directive.name}\"",
+        ty: "error",
+      })
+    }
+  }
+  for argument_def in definition.arguments {
+    if is_required_arg(argument_def) && !seen.contains(argument_def.name) {
+      errors.push({
+        message: "Missing required argument \"\{argument_def.name}\" on directive \"@\{directive.name}\"",
+        ty: "error",
+      })
+    }
+  }
 }
 
 ///|
@@ -458,7 +686,7 @@ fn validate_selections_on_type(
           })
         } else {
           guard found is Some(fd)
-          validate_required_arguments(field, fd, errors)
+          validate_field_arguments(field, fd, errors)
           guard unwrap_type_name(fd.field_type) is Some(inner_type) else {
             continue
           }
@@ -599,28 +827,48 @@ fn find_field_def(
 }
 
 ///|
-fn validate_required_arguments(
+fn validate_field_arguments(
   field : @ast.FieldNode,
   field_def : @ast.FieldDef,
   errors : Array[ValidationError],
 ) -> Unit {
-  for arg_def in field_def.arguments {
-    if is_required_arg(arg_def) {
-      let mut found = false
-      for arg in field.arguments {
-        if arg.name == arg_def.name {
-          found = true
-          break
-        }
-      }
-      if !found {
-        errors.push({
-          message: "Missing required argument \"\{arg_def.name}\" on field \"\{field.name}\"",
-          ty: "error",
-        })
-      }
+  let seen : Map[String, Bool] = {}
+  for argument in field.arguments {
+    if seen.contains(argument.name) {
+      errors.push({
+        message: "Duplicate argument \"\{argument.name}\" on field \"\{field.name}\"",
+        ty: "error",
+      })
+    }
+    seen[argument.name] = true
+    if find_input_value_def(field_def.arguments, argument.name) is None {
+      errors.push({
+        message: "Unknown argument \"\{argument.name}\" on field \"\{field.name}\"",
+        ty: "error",
+      })
     }
   }
+  for arg_def in field_def.arguments {
+    if is_required_arg(arg_def) && !seen.contains(arg_def.name) {
+      errors.push({
+        message: "Missing required argument \"\{arg_def.name}\" on field \"\{field.name}\"",
+        ty: "error",
+      })
+    }
+  }
+}
+
+///|
+fn find_input_value_def(
+  definitions : Array[@ast.InputValueDef],
+  name : String,
+) -> @ast.InputValueDef? {
+  for definition in definitions {
+    if definition.name == name {
+      return Some(definition)
+    }
+  }
+  None
 }
 
 ///|
