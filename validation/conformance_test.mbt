@@ -332,3 +332,245 @@ test "conformance: custom repeatable directives use schema definitions" {
   let errors = @validation.validate_against_schema(doc, schema)
   assert_eq(errors.length(), 0)
 }
+
+///|
+test "conformance: built-in scalar literals are type checked" {
+  let schema = @parser.parse(
+    "type Query { search(limit: Int, ratio: Float, id: ID): String }",
+  )
+  let doc = @parser.parse("{ search(limit: \"ten\", ratio: 2, id: 42) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 1)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Expected value of type "Int" for argument "limit" on field "search", found String
+    ),
+  )
+}
+
+///|
+test "conformance: non-null arguments reject null literals" {
+  let schema = @parser.parse("type Query { user(id: ID!): String }")
+  let doc = @parser.parse("{ user(id: null) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Null is not allowed for non-null argument "id" on field "user"
+    ),
+  )
+}
+
+///|
+test "conformance: enum literals must name a declared value" {
+  let schema = @parser.parse(
+    (
+      #|enum Episode { NEWHOPE EMPIRE JEDI }
+      #|type Query { hero(episode: Episode): String }
+    ),
+  )
+  let doc = @parser.parse("{ hero(episode: FUTURE) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Unknown value "FUTURE" for enum "Episode" in argument "episode" on field "hero"
+    ),
+  )
+}
+
+///|
+test "conformance: enum input does not accept a string literal" {
+  let schema = @parser.parse(
+    (
+      #|enum Episode { NEWHOPE EMPIRE JEDI }
+      #|type Query { hero(episode: Episode): String }
+    ),
+  )
+  let doc = @parser.parse("{ hero(episode: \"NEWHOPE\") }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Expected value of type "Episode" for argument "episode" on field "hero", found String
+    ),
+  )
+}
+
+///|
+test "conformance: a single value can be coerced to a list input" {
+  let schema = @parser.parse("type Query { nodes(ids: [ID!]!): String }")
+  let doc = @parser.parse("{ nodes(ids: 1) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "conformance: list elements are checked recursively" {
+  let schema = @parser.parse("type Query { nodes(ids: [ID!]!): String }")
+  let doc = @parser.parse("{ nodes(ids: [1, true]) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Expected value of type "ID" for argument "ids" on field "nodes", found Boolean
+    ),
+  )
+}
+
+///|
+test "conformance: input object fields are known unique and complete" {
+  let schema = @parser.parse(
+    (
+      #|input UserInput { name: String! age: Int }
+      #|type Query { create(input: UserInput!): String }
+    ),
+  )
+  let doc = @parser.parse(
+    "{ create(input: { age: 10, age: 11, extra: true }) }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 3)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Duplicate input field "age" for type "UserInput" in argument "input" on field "create"
+    ),
+  )
+  inspect(
+    errors[1].message(),
+    content=(
+      #|Unknown input field "extra" for type "UserInput" in argument "input" on field "create"
+    ),
+  )
+  inspect(
+    errors[2].message(),
+    content=(
+      #|Missing required input field "name" for type "UserInput" in argument "input" on field "create"
+    ),
+  )
+}
+
+///|
+test "conformance: nullable variable cannot satisfy non-null argument" {
+  let schema = @parser.parse("type Query { user(id: ID!): String }")
+  let doc = @parser.parse("query Demo($id: ID) { user(id: $id) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Variable "$id" of type "ID" is not compatible with expected type "ID!" for argument "id" on field "user"
+    ),
+  )
+}
+
+///|
+test "conformance: variable non-null default permits non-null position" {
+  let schema = @parser.parse("type Query { user(id: ID!): String }")
+  let doc = @parser.parse(
+    "query Demo($id: ID = \"fallback\") { user(id: $id) }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "conformance: location default permits nullable variable" {
+  let schema = @parser.parse(
+    "type Query { user(id: ID! = \"fallback\"): String }",
+  )
+  let doc = @parser.parse("query Demo($id: ID) { user(id: $id) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "conformance: variable named types must match" {
+  let schema = @parser.parse("type Query { user(id: ID): String }")
+  let doc = @parser.parse("query Demo($id: String) { user(id: $id) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Variable "$id" of type "String" is not compatible with expected type "ID" for argument "id" on field "user"
+    ),
+  )
+}
+
+///|
+test "conformance: variables nested in input objects are checked" {
+  let schema = @parser.parse(
+    (
+      #|input UserInput { id: ID! }
+      #|type Query { user(input: UserInput!): String }
+    ),
+  )
+  let doc = @parser.parse("query Demo($id: ID) { user(input: { id: $id }) }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Variable "$id" of type "ID" is not compatible with expected type "ID!" for input field "id" of "UserInput"
+    ),
+  )
+}
+
+///|
+test "conformance: directive variable positions are type checked" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse(
+    "query Demo($enabled: String!) { greeting @include(if: $enabled) }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Variable "$enabled" of type "String!" is not compatible with expected type "Boolean!" for argument "if" on directive "@include"
+    ),
+  )
+}
+
+///|
+test "conformance: variable defaults match the declared type" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse("query Demo($count: Int = \"many\") { greeting }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Expected value of type "Int" for default value for variable "$count", found String
+    ),
+  )
+}
+
+///|
+test "conformance: variable defaults must be constant" {
+  let schema = @parser.parse("type Query { greeting: String }")
+  let doc = @parser.parse(
+    "query Demo($first: ID, $second: ID = $first) { greeting }",
+  )
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content="Default value for variable \"$second\" must be a constant",
+  )
+}
+
+///|
+test "conformance: variables require input types" {
+  let schema = @parser.parse(
+    (
+      #|type User { id: ID! }
+      #|type Query { greeting: String }
+    ),
+  )
+  let doc = @parser.parse("query Demo($user: User) { greeting }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  inspect(
+    errors[0].message(),
+    content=(
+      #|Variable "$user" cannot use non-input type "User"
+    ),
+  )
+}

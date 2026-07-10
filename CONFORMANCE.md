@@ -26,14 +26,14 @@ Status meanings:
 | --- | --- | --- |
 | Operation and fragment name uniqueness | Supported | Duplicate named operations/fragments and documents mixing anonymous with other operations are rejected |
 | Fragment spread existence and cycles | Supported | Undefined spreads and direct/indirect cycles are rejected by `validate()` |
-| Variable references | Partial | Variable names are unique per operation; undefined references are checked across fields, directives, and transitively reached fragments; unused variables and type compatibility remain |
+| Variables | Partial | Names, declared input types, constant/default values, undefined references, transitive fragment/directive usage, and argument-position type compatibility are checked; unused-variable detection remains |
 | Field existence | Partial | Object/interface fields and fields inside named/inline fragments are checked; field merging and type-overlap rules remain |
 | Leaf/composite selection shape | Supported | Leaf fields reject sub-selections; object/interface/union fields require them |
 | Union selections | Supported | `__typename` and type-conditioned fragments are accepted; direct member-field selection is rejected |
-| Field arguments | Partial | Missing required, unknown, and duplicate arguments are rejected; literal value coercion remains |
+| Field arguments | Supported | Missing required, unknown, and duplicate arguments are rejected |
 | Fragment type conditions | Partial | Unknown and non-composite conditions are rejected; possible-type overlap checks remain |
 | Directives | Partial | October 2021 built-ins and schema-defined directives are checked for name, executable location, repeatability, and arguments; argument value coercion and SDL directive validation remain |
-| Input coercion and variable compatibility | Not implemented | Literal/input-object coercion and variable-position compatibility remain |
+| Input coercion | Partial | Built-in scalars, enums, nullability, list single-value coercion, and nested input objects are checked; custom scalar semantics are application-defined |
 | Schema validation | Not implemented | Type uniqueness, interface implementation, union members, input/output positions, and root-type validation remain |
 
 ## Runtime scope
