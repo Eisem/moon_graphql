@@ -64,13 +64,16 @@ test "validate multiple errors" {
 }
 
 ///|
-test "validate unnamed operations no duplicate" {
+test "validate multiple unnamed operations are rejected" {
   let input =
     #|{ hero { name } }
     #|mutation { createUser { id } }
   let doc = @parser.parse(input)
   let errors = @validation.validate(doc)
-  assert_eq(errors.length(), 0)
+  inspect(
+    errors[0].message(),
+    content="Anonymous operation must be the only operation in a document",
+  )
 }
 
 ///|

@@ -25,7 +25,12 @@ pub fn validate(doc : @ast.Document) -> Array[ValidationError] {
   validate_unique_fragment_names(doc, errors)
   validate_fragment_spreads(doc, errors)
   validate_unique_operation_names(doc, errors)
+  validate_lone_anonymous_operation(doc, errors)
+  validate_unique_variable_names(doc, errors)
   validate_variables_defined(doc, errors)
+  for error in detect_fragment_cycles(doc) {
+    errors.push(error)
+  }
   errors
 }
 
@@ -118,18 +123,73 @@ fn validate_unique_operation_names(
 }
 
 ///|
+fn validate_lone_anonymous_operation(
+  doc : @ast.Document,
+  errors : Array[ValidationError],
+) -> Unit {
+  let mut operation_count = 0
+  let mut has_anonymous = false
+  for def in doc.definitions {
+    if def is Operation(operation) {
+      operation_count += 1
+      if operation.name is None {
+        has_anonymous = true
+      }
+    }
+  }
+  if operation_count > 1 && has_anonymous {
+    errors.push({
+      message: "Anonymous operation must be the only operation in a document",
+      ty: "error",
+    })
+  }
+}
+
+///|
+fn validate_unique_variable_names(
+  doc : @ast.Document,
+  errors : Array[ValidationError],
+) -> Unit {
+  for def in doc.definitions {
+    if def is Operation(operation) {
+      let seen : Map[String, Bool] = {}
+      for variable in operation.variables {
+        if seen.contains(variable.name) {
+          errors.push({
+            message: "Duplicate variable name: $\{variable.name}",
+            ty: "error",
+          })
+        } else {
+          seen[variable.name] = true
+        }
+      }
+    }
+  }
+}
+
+///|
 fn validate_variables_defined(
   doc : @ast.Document,
   errors : Array[ValidationError],
 ) -> Unit {
+  let fragments : Map[String, @ast.FragmentDef] = {}
+  for def in doc.definitions {
+    if def is Fragment(fragment) {
+      fragments[fragment.name] = fragment
+    }
+  }
   for def in doc.definitions {
     if def is Operation(op) {
       let defined : Map[String, Bool] = {}
       for v in op.variables {
         defined[v.name] = true
       }
+      check_variables_in_directives(op.directives, defined, errors)
+      let visited_fragments : Map[String, Bool] = {}
       for sel in op.selections {
-        check_variables_in_selection(sel, defined, errors)
+        check_variables_in_selection(
+          sel, defined, fragments, visited_fragments, errors,
+        )
       }
     }
   }
@@ -139,6 +199,8 @@ fn validate_variables_defined(
 fn check_variables_in_selection(
   sel : @ast.Selection,
   defined : Map[String, Bool],
+  fragments : Map[String, @ast.FragmentDef],
+  visited_fragments : Map[String, Bool],
   errors : Array[ValidationError],
 ) -> Unit {
   match sel {
@@ -146,15 +208,48 @@ fn check_variables_in_selection(
       for arg in field.arguments {
         check_variables_in_value(arg.value, defined, errors)
       }
+      check_variables_in_directives(field.directives, defined, errors)
       for s in field.selections {
-        check_variables_in_selection(s, defined, errors)
+        check_variables_in_selection(
+          s, defined, fragments, visited_fragments, errors,
+        )
       }
     }
-    FragmentSpread(_) => ()
-    InlineFragment(frag) =>
-      for s in frag.selections {
-        check_variables_in_selection(s, defined, errors)
+    FragmentSpread(spread) => {
+      check_variables_in_directives(spread.directives, defined, errors)
+      if !visited_fragments.contains(spread.name) {
+        visited_fragments[spread.name] = true
+        if fragments.get(spread.name) is Some(fragment) {
+          check_variables_in_directives(fragment.directives, defined, errors)
+          for s in fragment.selections {
+            check_variables_in_selection(
+              s, defined, fragments, visited_fragments, errors,
+            )
+          }
+        }
       }
+    }
+    InlineFragment(frag) => {
+      check_variables_in_directives(frag.directives, defined, errors)
+      for s in frag.selections {
+        check_variables_in_selection(
+          s, defined, fragments, visited_fragments, errors,
+        )
+      }
+    }
+  }
+}
+
+///|
+fn check_variables_in_directives(
+  directives : Array[@ast.Directive],
+  defined : Map[String, Bool],
+  errors : Array[ValidationError],
+) -> Unit {
+  for directive in directives {
+    for argument in directive.arguments {
+      check_variables_in_value(argument.value, defined, errors)
+    }
   }
 }
 
@@ -185,6 +280,16 @@ fn check_variables_in_value(
 priv struct SchemaInfo {
   object_fields : Map[String, Array[@ast.FieldDef]]
   has_type : Map[String, String]
+}
+
+///|
+fn is_composite_kind(kind : String) -> Bool {
+  kind == "object" || kind == "interface" || kind == "union"
+}
+
+///|
+fn is_leaf_kind(kind : String) -> Bool {
+  kind == "scalar" || kind == "enum"
 }
 
 ///|
@@ -232,6 +337,14 @@ pub fn validate_against_schema(
   let errors = validate(doc)
   let schema_info = build_schema_info(schema)
   let root_types = find_root_types(schema)
+  let fragments : Map[String, @ast.FragmentDef] = {}
+  for def in doc.definitions {
+    if def is Fragment(fragment) {
+      fragments[fragment.name] = fragment
+    }
+  }
+  let validating_fragments : Map[String, Bool] = {}
+  let validated_fragments : Map[String, Bool] = {}
   for def in doc.definitions {
     if def is Operation(op) {
       let root_type = match op.operation {
@@ -240,9 +353,24 @@ pub fn validate_against_schema(
         Subscription => root_types.2
       }
       if root_type is Some(rt) {
-        validate_selections_on_type(op.selections, rt, schema_info, errors)
+        validate_selections_on_type(
+          op.selections,
+          rt,
+          schema_info,
+          fragments,
+          validating_fragments,
+          validated_fragments,
+          errors,
+        )
       }
     }
+  }
+  // Validate unused fragments too: executable-document validation applies to
+  // every definition, not only definitions reachable from an operation.
+  for name, _ in fragments {
+    validate_named_fragment(
+      name, schema_info, fragments, validating_fragments, validated_fragments, errors,
+    )
   }
   errors
 }
@@ -280,17 +408,21 @@ fn validate_selections_on_type(
   selections : Array[@ast.Selection],
   type_name : String,
   schema_info : SchemaInfo,
+  fragments : Map[String, @ast.FragmentDef],
+  validating_fragments : Map[String, Bool],
+  validated_fragments : Map[String, Bool],
   errors : Array[ValidationError],
 ) -> Unit {
   let type_kind = schema_info.has_type.get(type_name)
   if type_kind is None {
+    errors.push({
+      message: "Unknown type \"\{type_name}\" in selection context",
+      ty: "error",
+    })
     return
   }
   guard type_kind is Some(kind)
-  if kind == "scalar" ||
-    kind == "enum" ||
-    kind == "union" ||
-    kind == "input-object" {
+  if is_leaf_kind(kind) || kind == "input-object" {
     for sel in selections {
       if sel is Field(field) {
         errors.push({
@@ -303,41 +435,153 @@ fn validate_selections_on_type(
   }
   let fields_opt = schema_info.object_fields.get(type_name)
   for sel in selections {
-    if sel is Field(field) {
-      if field.name == "__typename" {
-        continue
-      }
-      if fields_opt is None {
-        return
-      }
-      guard fields_opt is Some(field_defs)
-      let found = find_field_def(field_defs, field.name)
-      if found is None {
-        errors.push({
-          message: "Field \"\{field.name}\" is not defined on type \"\{type_name}\"",
-          ty: "error",
-        })
-      } else {
-        guard found is Some(fd)
-        validate_required_arguments(field, fd, errors)
-        let inner_type = unwrap_type_name(fd.field_type)
-        if !field.selections.is_empty() {
-          if inner_type is Some(it) {
-            validate_selections_on_type(
-              field.selections,
-              it,
-              schema_info,
-              errors,
-            )
+    match sel {
+      Field(field) => {
+        if field.name == "__typename" {
+          continue
+        }
+        // Union fields can only be selected through type-conditioned
+        // fragments. __typename is handled above.
+        if kind == "union" {
+          errors.push({
+            message: "Field \"\{field.name}\" cannot be selected directly on union type \"\{type_name}\"",
+            ty: "error",
+          })
+          continue
+        }
+        guard fields_opt is Some(field_defs) else { continue }
+        let found = find_field_def(field_defs, field.name)
+        if found is None {
+          errors.push({
+            message: "Field \"\{field.name}\" is not defined on type \"\{type_name}\"",
+            ty: "error",
+          })
+        } else {
+          guard found is Some(fd)
+          validate_required_arguments(field, fd, errors)
+          guard unwrap_type_name(fd.field_type) is Some(inner_type) else {
+            continue
+          }
+          let inner_kind = schema_info.has_type.get(inner_type)
+          if inner_kind is Some(result_kind) {
+            if is_leaf_kind(result_kind) && !field.selections.is_empty() {
+              errors.push({
+                message: "Field \"\{field.name}\" of leaf type \"\{inner_type}\" must not have a selection set",
+                ty: "error",
+              })
+            } else if is_composite_kind(result_kind) &&
+              field.selections.is_empty() {
+              errors.push({
+                message: "Field \"\{field.name}\" of composite type \"\{inner_type}\" must have a selection set",
+                ty: "error",
+              })
+            } else if is_composite_kind(result_kind) {
+              validate_selections_on_type(
+                field.selections,
+                inner_type,
+                schema_info,
+                fragments,
+                validating_fragments,
+                validated_fragments,
+                errors,
+              )
+            }
           } else {
             errors.push({
-              message: "Field \"\{field.name}\" on type \"\{type_name}\" has sub-selections but its return type is not an object type",
+              message: "Field \"\{field.name}\" references unknown type \"\{inner_type}\"",
               ty: "error",
             })
           }
         }
       }
+      FragmentSpread(spread) =>
+        validate_named_fragment(
+          spread.name,
+          schema_info,
+          fragments,
+          validating_fragments,
+          validated_fragments,
+          errors,
+        )
+      InlineFragment(fragment) => {
+        let fragment_type = match fragment.type_condition {
+          Some(condition) => condition
+          None => type_name
+        }
+        validate_fragment_type_condition(fragment_type, schema_info, errors)
+        match schema_info.has_type.get(fragment_type) {
+          Some(fragment_kind) =>
+            if is_composite_kind(fragment_kind) {
+              validate_selections_on_type(
+                fragment.selections,
+                fragment_type,
+                schema_info,
+                fragments,
+                validating_fragments,
+                validated_fragments,
+                errors,
+              )
+            }
+          None => ()
+        }
+      }
     }
+  }
+}
+
+///|
+fn validate_named_fragment(
+  name : String,
+  schema_info : SchemaInfo,
+  fragments : Map[String, @ast.FragmentDef],
+  validating_fragments : Map[String, Bool],
+  validated_fragments : Map[String, Bool],
+  errors : Array[ValidationError],
+) -> Unit {
+  if validated_fragments.contains(name) || validating_fragments.contains(name) {
+    return
+  }
+  guard fragments.get(name) is Some(fragment) else { return }
+  validating_fragments[name] = true
+  validate_fragment_type_condition(fragment.type_condition, schema_info, errors)
+  match schema_info.has_type.get(fragment.type_condition) {
+    Some(kind) =>
+      if is_composite_kind(kind) {
+        validate_selections_on_type(
+          fragment.selections,
+          fragment.type_condition,
+          schema_info,
+          fragments,
+          validating_fragments,
+          validated_fragments,
+          errors,
+        )
+      }
+    None => ()
+  }
+  validating_fragments.remove(name)
+  validated_fragments[name] = true
+}
+
+///|
+fn validate_fragment_type_condition(
+  type_name : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  match schema_info.has_type.get(type_name) {
+    None =>
+      errors.push({
+        message: "Fragment type condition references unknown type \"\{type_name}\"",
+        ty: "error",
+      })
+    Some(kind) =>
+      if !is_composite_kind(kind) {
+        errors.push({
+          message: "Fragment type condition \"\{type_name}\" must be a composite type",
+          ty: "error",
+        })
+      }
   }
 }
 

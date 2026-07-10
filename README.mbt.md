@@ -1,6 +1,8 @@
 # eisem/moon_graphql
 
-A GraphQL parser, validator, and printer toolkit for MoonBit.
+A GraphQL language parser, validator, and printer toolkit for MoonBit.
+
+This project provides language-processing infrastructure rather than a GraphQL server runtime. See the [conformance matrix](CONFORMANCE.md) for the exact specification coverage and current limitations.
 
 ## Installation
 
@@ -112,12 +114,19 @@ test "validate against schema example" {
 ### Validation
 - Unique fragment names
 - Fragment spread references
+- Fragment cycle detection
 - Unique operation names
-- Variable definition checks
+- Lone anonymous operation checks
+- Unique variable names and undefined-variable checks across directives/fragments
 - Field existence on types (schema-aware)
 - Required argument checking (schema-aware)
-- Leaf field selection checks (scalars, enums, unions, input types)
+- Leaf/composite field selection checks
+- Named and inline fragment field validation
+- Union selections through type-conditioned fragments
+- Fragment type-condition checks
 - Structured error types with error/warning classification
+
+Validation is intentionally incremental and does not yet implement every executable-document or schema rule from the GraphQL specification. In particular, directive validation, complete variable compatibility/input coercion, field merging, possible-type overlap, and schema validation remain. See [GraphQL conformance](CONFORMANCE.md).
 
 ### Error Reporting
 - Parse errors with line/column location information
