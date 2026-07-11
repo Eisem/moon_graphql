@@ -139,7 +139,7 @@ test "conformance: fragment condition must reference a known type" {
   let schema = @parser.parse("type Query { greeting: String }")
   let doc = @parser.parse(
     (
-      #|query { greeting }
+      #|query { ...missingFields }
       #|fragment missingFields on Missing { value }
     ),
   )
@@ -157,7 +157,7 @@ test "conformance: fragment condition must be composite" {
   let schema = @parser.parse("type Query { greeting: String }")
   let doc = @parser.parse(
     (
-      #|query { greeting }
+      #|query { ...invalidFields }
       #|fragment invalidFields on String { value }
     ),
   )
@@ -533,8 +533,10 @@ test "conformance: directive variable positions are type checked" {
 
 ///|
 test "conformance: variable defaults match the declared type" {
-  let schema = @parser.parse("type Query { greeting: String }")
-  let doc = @parser.parse("query Demo($count: Int = \"many\") { greeting }")
+  let schema = @parser.parse("type Query { greeting(count: Int): String }")
+  let doc = @parser.parse(
+    "query Demo($count: Int = \"many\") { greeting(count: $count) }",
+  )
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
     errors[0].message(),
@@ -546,9 +548,11 @@ test "conformance: variable defaults match the declared type" {
 
 ///|
 test "conformance: variable defaults must be constant" {
-  let schema = @parser.parse("type Query { greeting: String }")
+  let schema = @parser.parse(
+    "type Query { greeting(first: ID, second: ID): String }",
+  )
   let doc = @parser.parse(
-    "query Demo($first: ID, $second: ID = $first) { greeting }",
+    "query Demo($first: ID, $second: ID = $first) { greeting(first: $first, second: $second) }",
   )
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
@@ -562,15 +566,55 @@ test "conformance: variables require input types" {
   let schema = @parser.parse(
     (
       #|type User { id: ID! }
-      #|type Query { greeting: String }
+      #|type Query { greeting(user: User): String }
     ),
   )
-  let doc = @parser.parse("query Demo($user: User) { greeting }")
+  let doc = @parser.parse("query Demo($user: User) { greeting(user: $user) }")
   let errors = @validation.validate_against_schema(doc, schema)
   inspect(
     errors[0].message(),
     content=(
       #|Variable "$user" cannot use non-input type "User"
     ),
+  )
+}
+
+///|
+test "conformance: every declared variable must be used" {
+  let doc = @parser.parse(
+    "query Demo($used: ID, $unused: String) { node(id: $used) { id } }",
+  )
+  let errors = @validation.validate(doc)
+  inspect(
+    errors[0].message(),
+    content="Variable \"$unused\" is never used by operation \"Demo\"",
+  )
+}
+
+///|
+test "conformance: variable usage through transitive fragments counts" {
+  let doc = @parser.parse(
+    (
+      #|query Demo($enabled: Boolean!) { hero { ...outer } }
+      #|fragment outer on Hero { ...inner }
+      #|fragment inner on Hero { name @include(if: $enabled) }
+    ),
+  )
+  let errors = @validation.validate(doc)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "conformance: every fragment must be reachable from an operation" {
+  let doc = @parser.parse(
+    (
+      #|query Demo { hero { name } }
+      #|fragment unusedFields on Hero { name }
+    ),
+  )
+  let errors = @validation.validate(doc)
+  inspect(
+    errors[0].message(),
+    content="Fragment \"unusedFields\" is never used by an operation",
   )
 }

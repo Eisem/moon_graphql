@@ -17,7 +17,7 @@ Status meanings:
 | Type-system definitions | Supported | Schema, scalar, object, interface, union, enum, input object, and directive definitions |
 | Type-system extensions | Not implemented | `extend schema`, `extend type`, and the other SDL extension forms are not represented in the AST |
 | String lexical semantics | Supported | Standard escapes, BMP/surrogate-pair Unicode escapes, invalid-escape rejection, raw line/control checks, escaped triple quotes, and BlockStringValue normalization |
-| Number lexical semantics | Supported | Integer, fraction, exponent, leading-zero, required-digit, and token-termination rules are enforced |
+| Number lexical semantics | Supported | Integer, fraction, exponent, leading-zero, required-digit, token-termination, and signed 32-bit GraphQL Int bounds are enforced |
 | AST printer | Supported | Executable and SDL definitions round-trip through parse → print → parse; comments and original whitespace are intentionally not preserved |
 
 ## Validation support
@@ -26,12 +26,13 @@ Status meanings:
 | --- | --- | --- |
 | Operation and fragment name uniqueness | Supported | Duplicate named operations/fragments and documents mixing anonymous with other operations are rejected |
 | Fragment spread existence and cycles | Supported | Undefined spreads and direct/indirect cycles are rejected by `validate()` |
-| Variables | Partial | Names, declared input types, constant/default values, undefined references, transitive fragment/directive usage, and argument-position type compatibility are checked; unused-variable detection remains |
+| Variables | Supported | Names, declared input types, constant/default values, undefined and unused references, transitive fragment/directive usage, and argument-position type compatibility are checked |
 | Field existence | Partial | Object/interface fields and fields inside named/inline fragments are checked; field merging and type-overlap rules remain |
 | Leaf/composite selection shape | Supported | Leaf fields reject sub-selections; object/interface/union fields require them |
 | Union selections | Supported | `__typename` and type-conditioned fragments are accepted; direct member-field selection is rejected |
 | Field arguments | Supported | Missing required, unknown, and duplicate arguments are rejected |
 | Fragment type conditions | Partial | Unknown and non-composite conditions are rejected; possible-type overlap checks remain |
+| Fragment usage | Supported | Every fragment must be transitively reachable from at least one operation |
 | Directives | Partial | October 2021 built-ins and schema-defined directives are checked for name, executable location, repeatability, and arguments; argument value coercion and SDL directive validation remain |
 | Input coercion | Partial | Built-in scalars, enums, nullability, list single-value coercion, and nested input objects are checked; custom scalar semantics are application-defined |
 | Schema validation | Not implemented | Type uniqueness, interface implementation, union members, input/output positions, and root-type validation remain |

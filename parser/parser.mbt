@@ -62,24 +62,42 @@ fn Parser::expect_token(
 }
 
 ///|
-fn parse_int_literal(s : String) -> Int {
-  let mut result = 0
-  let mut neg = false
-  let mut first = true
-  for c in s {
-    if first && c == '-' {
-      neg = true
-      first = false
-      continue
+fn parse_int_literal(
+  s : String,
+  loc : @ast.Location,
+) -> Int raise @ast.ParseError {
+  let negative = s.length() > 0 && s.get_char(0) == Some('-')
+  let digit_start = if negative { 1 } else { 0 }
+  let digit_count = s.length() - digit_start
+  let limit = if negative { "2147483648" } else { "2147483647" }
+  let mut out_of_range = digit_count > limit.length()
+  if digit_count == limit.length() {
+    for i in 0..<digit_count {
+      guard s.get_char(digit_start + i) is Some(actual)
+      guard limit.get_char(i) is Some(maximum)
+      if actual > maximum {
+        out_of_range = true
+        break
+      }
+      if actual < maximum {
+        break
+      }
     }
-    first = false
-    result = result * 10 + (c.to_int() - 48)
   }
-  if neg {
-    -result
-  } else {
-    result
+  if out_of_range {
+    raise @ast.ParseError::InvalidNumber(text=s, loc~)
   }
+  let mut result = 0
+  for i in digit_start..<s.length() {
+    guard s.get_char(i) is Some(c)
+    let digit = c.to_int() - 48
+    if negative {
+      result = result * 10 - digit
+    } else {
+      result = result * 10 + digit
+    }
+  }
+  result
 }
 
 ///|
@@ -356,8 +374,8 @@ fn Parser::parse_value(self : Parser) -> @ast.Value raise @ast.ParseError {
       @ast.Value::Variable(name)
     }
     IntValue(s) => {
-      let _ = self.advance()
-      @ast.Value::IntVal(parse_int_literal(s))
+      let token = self.advance()
+      @ast.Value::IntVal(parse_int_literal(s, token.loc))
     }
     FloatValue(s) => {
       let _ = self.advance()

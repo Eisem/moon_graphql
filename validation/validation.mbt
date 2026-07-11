@@ -31,6 +31,8 @@ pub fn validate(doc : @ast.Document) -> Array[ValidationError] {
   for error in detect_fragment_cycles(doc) {
     errors.push(error)
   }
+  validate_no_unused_variables(doc, errors)
+  validate_no_unused_fragments(doc, errors)
   errors
 }
 

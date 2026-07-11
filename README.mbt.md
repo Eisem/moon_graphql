@@ -19,6 +19,7 @@ GraphQL 的解析器、AST 和验证器是服务器、客户端与开发工具�
 - 支持 `parse → validate → print` 完整语言处理流程；
 - 对数字、Unicode 字符串、Block String、Fragment、Union、变量和输入值进行规范化检查；
 - 提供 153 个自动化测试及 GitHub Actions CI；
+- 提供基于 MoonBit 官方 `moon bench` 的 parse/validate/print 性能回归基线；
 - 明确记录已支持、部分支持和暂未实现的规范能力，避免模糊的“完整支持”声明。
 
 ## 安装
@@ -152,6 +153,7 @@ CLI 会展示查询与 Schema 的解析、验证和格式化输出流程。
 - Fragment 引用存在性和循环检测；
 - 匿名操作唯一性；
 - 变量名称、声明类型、默认值、引用范围和参数位置兼容性；
+- 未使用变量与未使用 Fragment 检查；
 - 字段存在性与叶子/复合类型选择集检查；
 - 参数存在性、唯一性、必填参数和输入值 coercion；
 - 标量、Enum、List、Input Object 和 Non-Null 输入检查；
@@ -166,12 +168,15 @@ CLI 会展示查询与 Schema 的解析、验证和格式化输出流程。
 
 - GraphQL 执行器、Resolver、Introspection 执行和网络传输；
 - SDL `extend` 类型系统扩展；
-- 未使用变量/Fragment 检查；
 - 字段合并冲突检查和 Fragment possible-type overlap；
 - 自定义 Scalar 的应用层 coercion；
 - 完整 Schema 合法性验证。
 
 详细状态及测试来源请查看 [GraphQL 规范覆盖矩阵](CONFORMANCE.md)。
+
+## 性能基准
+
+仓库提供 10/100 字段查询的解析、打印、验证和完整流水线 benchmark。测试方法、运行命令、本机环境和基线结果见 [BENCHMARKS.md](BENCHMARKS.md)。这些数据用于发现性能回归；在建立相同语料、固定依赖版本和等价工作量之前，项目不会宣称快于 `graphql-js` 或 Rust `graphql-parser`。
 
 ## 工程质量检查
 

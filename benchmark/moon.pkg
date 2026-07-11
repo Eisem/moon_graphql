@@ -1,0 +1,6 @@
+import {
+  "eisem/moon_graphql/parser",
+  "eisem/moon_graphql/printer",
+  "eisem/moon_graphql/validation",
+  "moonbitlang/core/bench",
+} for "test"
