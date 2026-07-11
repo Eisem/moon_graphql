@@ -18,7 +18,7 @@ GraphQL 的解析器、AST 和验证器是服务器、客户端与开发工具�
 - 同时覆盖 GraphQL 查询语言和 Schema Definition Language（SDL）；
 - 支持 `parse → validate → print` 完整语言处理流程；
 - 对数字、Unicode 字符串、Block String、Fragment、Union、变量和输入值进行规范化检查；
-- 提供 164 个自动化测试及 GitHub Actions CI；
+- 提供 167 个自动化测试及 GitHub Actions CI；
 - 提供基于 MoonBit 官方 `moon bench` 的 parse/validate/print 性能回归基线；
 - 明确记录已支持、部分支持和暂未实现的规范能力，避免模糊的“完整支持”声明。
 
@@ -198,7 +198,7 @@ moon run cmd/lint -- "{ hero { ...missing } }"
 - 内建及 Schema 自定义 Directive 的名称、位置、重复性和参数检查；
 - Named/Inline Fragment 字段验证；
 - Union 的 `__typename` 和类型条件 Fragment 验证；
-- Schema SDL 的重复定义、类型引用位置、根操作类型、Union 成员和接口引用检查；
+- Schema SDL 的重复定义、类型引用位置、根操作类型、Union 成员，以及 Interface 字段/参数契约检查；
 - 结构化 `ValidationError`，支持错误信息与严重级别判断。
 
 ## 当前边界
@@ -209,7 +209,7 @@ moon run cmd/lint -- "{ hero { ...missing } }"
 - SDL `extend` 类型系统扩展；
 - 字段合并冲突检查和 Fragment possible-type overlap；
 - 自定义 Scalar 的应用层 coercion；
-- Interface 字段/参数签名兼容性、SDL Directive 使用和默认值的完整 Schema 合法性验证。
+- SDL Directive 使用和默认值的完整 Schema 合法性验证。
 
 详细状态及测试来源请查看 [GraphQL 规范覆盖矩阵](CONFORMANCE.md)。
 

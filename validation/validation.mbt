@@ -288,6 +288,8 @@ priv struct SchemaInfo {
   enum_values : Map[String, Array[String]]
   has_type : Map[String, String]
   directive_defs : Map[String, @ast.DirectiveDef]
+  implemented_interfaces : Map[String, Array[String]]
+  union_members : Map[String, Array[String]]
 }
 
 ///|
@@ -372,6 +374,8 @@ fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
   let enum_values : Map[String, Array[String]] = {}
   let has_type : Map[String, String] = {}
   let directive_defs : Map[String, @ast.DirectiveDef] = {}
+  let implemented_interfaces : Map[String, Array[String]] = {}
+  let union_members : Map[String, Array[String]] = {}
   for directive in builtin_directive_definitions() {
     directive_defs[directive.name] = directive
   }
@@ -392,12 +396,17 @@ fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
         ObjectType(obj) => {
           object_fields[obj.name] = obj.fields
           has_type[obj.name] = "object"
+          implemented_interfaces[obj.name] = obj.interfaces
         }
         InterfaceType(iface) => {
           object_fields[iface.name] = iface.fields
           has_type[iface.name] = "interface"
+          implemented_interfaces[iface.name] = iface.interfaces
         }
-        UnionType(u) => has_type[u.name] = "union"
+        UnionType(u) => {
+          has_type[u.name] = "union"
+          union_members[u.name] = u.members
+        }
         EnumType(e) => {
           has_type[e.name] = "enum"
           let values : Array[String] = []
@@ -416,7 +425,15 @@ fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
       }
     }
   }
-  { object_fields, input_fields, enum_values, has_type, directive_defs }
+  {
+    object_fields,
+    input_fields,
+    enum_values,
+    has_type,
+    directive_defs,
+    implemented_interfaces,
+    union_members,
+  }
 }
 
 ///|
@@ -630,7 +647,7 @@ fn validate_object_or_interface_definition(
 ) -> Unit {
   validate_unique_field_names(type_name, kind, fields, errors)
   validate_implemented_interfaces(
-    type_name, kind, interfaces, schema_info, errors,
+    type_name, kind, interfaces, fields, schema_info, errors,
   )
   for field in fields {
     validate_output_type(
@@ -678,12 +695,14 @@ fn validate_implemented_interfaces(
   type_name : String,
   kind : String,
   interfaces : Array[String],
+  fields : Array[@ast.FieldDef],
   schema_info : SchemaInfo,
   errors : Array[ValidationError],
 ) -> Unit {
   let seen : Map[String, Bool] = {}
   for interface_name in interfaces {
-    if seen.contains(interface_name) {
+    let duplicate = seen.contains(interface_name)
+    if duplicate {
       errors.push({
         message: "Duplicate implemented interface \"\{interface_name}\" on \{kind} type \"\{type_name}\"",
         ty: "error",
@@ -696,7 +715,12 @@ fn validate_implemented_interfaces(
           message: "Implemented interface \"\{interface_name}\" on \{kind} type \"\{type_name}\" is not defined",
           ty: "error",
         })
-      Some("interface") => ()
+      Some("interface") =>
+        if !duplicate {
+          validate_interface_contract(
+            type_name, kind, fields, interface_name, schema_info, errors,
+          )
+        }
       Some(_) =>
         errors.push({
           message: "Implemented type \"\{interface_name}\" on \{kind} type \"\{type_name}\" must be an interface",
@@ -704,6 +728,166 @@ fn validate_implemented_interfaces(
         })
     }
   }
+}
+
+///|
+fn validate_interface_contract(
+  type_name : String,
+  kind : String,
+  fields : Array[@ast.FieldDef],
+  interface_name : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  guard schema_info.object_fields.get(interface_name) is Some(interface_fields) else {
+    return
+  }
+  for interface_field in interface_fields {
+    match find_field_def(fields, interface_field.name) {
+      None =>
+        errors.push({
+          message: "\{kind} type \"\{type_name}\" must define field \"\{interface_field.name}\" required by interface \"\{interface_name}\"",
+          ty: "error",
+        })
+      Some(field) => {
+        if !is_output_type_subtype(
+            field.field_type,
+            interface_field.field_type,
+            schema_info,
+          ) {
+          errors.push({
+            message: "Field \"\{field.name}\" on \{kind} type \"\{type_name}\" has type \"\{type_ref_string(field.field_type)}\" which is not compatible with interface \"\{interface_name}\" type \"\{type_ref_string(interface_field.field_type)}\"",
+            ty: "error",
+          })
+        }
+        validate_interface_field_arguments(
+          type_name, kind, interface_name, field, interface_field, errors,
+        )
+      }
+    }
+  }
+}
+
+///|
+fn validate_interface_field_arguments(
+  type_name : String,
+  kind : String,
+  interface_name : String,
+  field : @ast.FieldDef,
+  interface_field : @ast.FieldDef,
+  errors : Array[ValidationError],
+) -> Unit {
+  for interface_argument in interface_field.arguments {
+    match find_input_value_def(field.arguments, interface_argument.name) {
+      None =>
+        errors.push({
+          message: "Field \"\{field.name}\" on \{kind} type \"\{type_name}\" must define argument \"\{interface_argument.name}\" required by interface \"\{interface_name}\"",
+          ty: "error",
+        })
+      Some(argument) =>
+        if argument.input_type != interface_argument.input_type {
+          errors.push({
+            message: "Argument \"\{argument.name}\" on field \"\{field.name}\" of \{kind} type \"\{type_name}\" has type \"\{type_ref_string(argument.input_type)}\" which is not compatible with interface \"\{interface_name}\" type \"\{type_ref_string(interface_argument.input_type)}\"",
+            ty: "error",
+          })
+        }
+    }
+  }
+  for argument in field.arguments {
+    if find_input_value_def(interface_field.arguments, argument.name) is None &&
+      is_required_arg(argument) {
+      errors.push({
+        message: "Additional argument \"\{argument.name}\" on field \"\{field.name}\" of \{kind} type \"\{type_name}\" must not be required when implementing interface \"\{interface_name}\"",
+        ty: "error",
+      })
+    }
+  }
+}
+
+///|
+fn is_output_type_subtype(
+  implementation_type : @ast.TypeRef,
+  interface_type : @ast.TypeRef,
+  schema_info : SchemaInfo,
+) -> Bool {
+  match interface_type {
+    NonNull(interface_inner) =>
+      match implementation_type {
+        NonNull(implementation_inner) =>
+          is_output_type_subtype(
+            implementation_inner, interface_inner, schema_info,
+          )
+        _ => false
+      }
+    List(interface_inner) =>
+      match implementation_type {
+        NonNull(implementation_inner) =>
+          is_output_type_subtype(
+            implementation_inner, interface_type, schema_info,
+          )
+        List(implementation_inner) =>
+          is_output_type_subtype(
+            implementation_inner, interface_inner, schema_info,
+          )
+        _ => false
+      }
+    Named(interface_name) =>
+      match implementation_type {
+        NonNull(implementation_inner) =>
+          is_output_type_subtype(
+            implementation_inner, interface_type, schema_info,
+          )
+        Named(implementation_name) =>
+          implementation_name == interface_name ||
+          is_named_output_type_subtype(
+            implementation_name, interface_name, schema_info,
+          )
+        _ => false
+      }
+  }
+}
+
+///|
+fn is_named_output_type_subtype(
+  implementation_name : String,
+  interface_name : String,
+  schema_info : SchemaInfo,
+) -> Bool {
+  match schema_info.has_type.get(interface_name) {
+    Some("interface") =>
+      implements_interface(implementation_name, interface_name, schema_info, {})
+    Some("union") =>
+      if schema_info.union_members.get(interface_name) is Some(members) {
+        members.contains(implementation_name)
+      } else {
+        false
+      }
+    _ => false
+  }
+}
+
+///|
+fn implements_interface(
+  type_name : String,
+  interface_name : String,
+  schema_info : SchemaInfo,
+  visiting : Map[String, Bool],
+) -> Bool {
+  if visiting.contains(type_name) {
+    return false
+  }
+  visiting[type_name] = true
+  if schema_info.implemented_interfaces.get(type_name) is Some(interfaces) {
+    for implemented_name in interfaces {
+      if implemented_name == interface_name ||
+        implements_interface(
+          implemented_name, interface_name, schema_info, visiting,
+        ) {
+        return true
+      }
+    }
+  }
+  false
 }
 
 ///|

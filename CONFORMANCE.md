@@ -35,7 +35,7 @@ Status meanings:
 | Fragment usage | Supported | Every fragment must be transitively reachable from at least one operation |
 | Directives | Partial | October 2021 built-ins and schema-defined directives are checked for name, executable location, repeatability, and arguments; argument value coercion and SDL directive validation remain |
 | Input coercion | Partial | Built-in scalars, enums, nullability, list single-value coercion, and nested input objects are checked; custom scalar semantics are application-defined |
-| Schema validation | Partial | Type/directive uniqueness, duplicate fields/arguments/input fields/enum values, input/output type positions, explicit root types, Union members, and interface references are checked; interface field-signature compatibility, SDL directive usage, and default-value validation remain |
+| Schema validation | Partial | Type/directive uniqueness, duplicate fields/arguments/input fields/enum values, input/output type positions, explicit root types, Union members, and Interface references/field contracts (including covariant output types) are checked; SDL directive usage and default-value validation remain |
 
 ## Runtime scope
 

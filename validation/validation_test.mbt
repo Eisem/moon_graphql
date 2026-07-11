@@ -168,6 +168,67 @@ test "validate_schema accepts a structurally valid schema" {
 }
 
 ///|
+test "validate_schema enforces implemented interface fields and arguments" {
+  let schema = @parser.parse(
+    (
+      #|interface Node { id: ID! search(limit: Int): String }
+      #|type User implements Node { search: String }
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 2)
+  inspect(
+    errors[0].message(),
+    content="object type \"User\" must define field \"id\" required by interface \"Node\"",
+  )
+  inspect(
+    errors[1].message(),
+    content="Field \"search\" on object type \"User\" must define argument \"limit\" required by interface \"Node\"",
+  )
+}
+
+///|
+test "validate_schema rejects incompatible interface field contracts" {
+  let schema = @parser.parse(
+    (
+      #|interface Node { id: ID! search(limit: Int): String }
+      #|type User implements Node {
+      #|  id: ID
+      #|  search(limit: String, required: Boolean!): String
+      #|}
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 3)
+  inspect(
+    errors[0].message(),
+    content="Field \"id\" on object type \"User\" has type \"ID\" which is not compatible with interface \"Node\" type \"ID!\"",
+  )
+  inspect(
+    errors[1].message(),
+    content="Argument \"limit\" on field \"search\" of object type \"User\" has type \"String\" which is not compatible with interface \"Node\" type \"Int\"",
+  )
+  inspect(
+    errors[2].message(),
+    content="Additional argument \"required\" on field \"search\" of object type \"User\" must not be required when implementing interface \"Node\"",
+  )
+}
+
+///|
+test "validate_schema accepts covariant interface field return types" {
+  let schema = @parser.parse(
+    (
+      #|interface Node { id: ID! }
+      #|type User implements Node { id: ID! }
+      #|interface Container { item: Node }
+      #|type UserContainer implements Container { item: User! }
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
 test "validate_schema rejects duplicate names inside definitions" {
   let schema = @parser.parse(
     (
