@@ -1,0 +1,9 @@
+import {
+  "eisem/moon_graphql/parser",
+  "eisem/moon_graphql/printer",
+  "moonbitlang/core/env",
+}
+
+options(
+  "is-main": true,
+)

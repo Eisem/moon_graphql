@@ -118,6 +118,23 @@ moon run cmd/main
 
 CLI 会展示查询与 Schema 的解析、验证和格式化输出流程。
 
+### 使用 Formatter / Linter CLI
+
+项目同时提供两个可直接运行的下游工具：
+
+```sh
+# 格式化 GraphQL 文档
+moon run cmd/format -- "{ hero { name } }"
+
+# 检查格式是否已经规范化
+moon run cmd/format -- --check "{ hero { name } }"
+
+# 执行文档级 Lint 检查
+moon run cmd/lint -- "{ hero { ...missing } }"
+```
+
+这两个命令展示了 `parser`、`printer` 和 `validation` 包如何组合成实际开发工具。当前 Linter 进行文档级检查；带 Schema 的查询检查仍可通过库 API `validate_against_schema` 完成。
+
 ## 已实现能力
 
 ### 词法分析

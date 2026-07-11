@@ -41,6 +41,8 @@ Status meanings:
 
 The project is a GraphQL language toolkit, not a GraphQL server runtime. Execution, resolvers, introspection execution, HTTP/WebSocket transport, subscriptions, federation, code generation, and client caching are not implemented.
 
+The repository includes runnable downstream tools in `cmd/format` and `cmd/lint`. They are intentionally thin compositions of the parser, printer, and validator packages, so users can adopt the library as a formatter or document linter without implementing the pipeline themselves.
+
 ## Test provenance
 
 The focused cases in `lexer/conformance_test.mbt` and `validation/conformance_test.mbt` are original minimal fixtures derived from specification behavior. No test fixture or implementation source was copied from `graphql-js` or other GraphQL libraries. Run all checks with:
