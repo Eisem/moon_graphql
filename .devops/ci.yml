@@ -1,0 +1,47 @@
+run-name: 'MoonBit CI'
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: 'git_clone@1.2.9'
+        with:
+          remote_url: 'https://www.gitlink.org.cn/Eisem/moon_graphql.git'
+          ref: 'refs/heads/master'
+
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> $GITHUB_PATH
+
+      - name: MoonBit Check
+        run: |
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon check --deny-warn
+
+      - name: MoonBit Build
+        run: |
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon build --deny-warn
+
+      - name: MoonBit Format Check
+        run: |
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon fmt --check
+
+      - name: MoonBit Info
+        run: |
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon info
+
+      - name: MoonBit Test
+        run: |
+          export PATH="$HOME/.moon/bin:$PATH"
+          moon test --deny-warn
