@@ -420,6 +420,442 @@ fn build_schema_info(schema : @ast.Document) -> SchemaInfo {
 }
 
 ///|
+/// Validate the internal consistency of a GraphQL Schema Definition Language
+/// document. This checks type and directive uniqueness, input/output type
+/// positions, root operation types, union members, implemented interfaces, and
+/// duplicate names within definitions.
+pub fn validate_schema(schema : @ast.Document) -> Array[ValidationError] {
+  let errors : Array[ValidationError] = []
+  let schema_info = build_schema_info(schema)
+  validate_unique_schema_definitions(schema, errors)
+  validate_schema_definitions(schema, schema_info, errors)
+  errors
+}
+
+///|
+fn validate_unique_schema_definitions(
+  schema : @ast.Document,
+  errors : Array[ValidationError],
+) -> Unit {
+  let type_names : Map[String, Bool] = {}
+  let directive_names : Map[String, Bool] = {}
+  let mut schema_definition_count = 0
+  for definition in schema.definitions {
+    guard definition is SchemaType(type_definition) else { continue }
+    match type_definition {
+      SchemaDefinition(_) => schema_definition_count += 1
+      DirectiveDefinition(directive) => {
+        if directive_names.contains(directive.name) {
+          errors.push({
+            message: "Duplicate directive definition \"@\{directive.name}\"",
+            ty: "error",
+          })
+        }
+        directive_names[directive.name] = true
+      }
+      _ =>
+        if type_system_def_name(type_definition) is Some(name) {
+          if type_names.contains(name) {
+            errors.push({
+              message: "Duplicate type definition \"\{name}\"",
+              ty: "error",
+            })
+          }
+          if is_builtin_type_name(name) {
+            errors.push({
+              message: "Type definition \"\{name}\" conflicts with a built-in type",
+              ty: "error",
+            })
+          }
+          type_names[name] = true
+        }
+    }
+  }
+  if schema_definition_count > 1 {
+    errors.push({
+      message: "A schema document must not contain more than one schema definition",
+      ty: "error",
+    })
+  }
+}
+
+///|
+fn type_system_def_name(definition : @ast.TypeSystemDef) -> String? {
+  match definition {
+    ScalarType(definition) => Some(definition.name)
+    ObjectType(definition) => Some(definition.name)
+    InterfaceType(definition) => Some(definition.name)
+    UnionType(definition) => Some(definition.name)
+    EnumType(definition) => Some(definition.name)
+    InputObjectType(definition) => Some(definition.name)
+    SchemaDefinition(_) | DirectiveDefinition(_) => None
+  }
+}
+
+///|
+fn is_builtin_type_name(name : String) -> Bool {
+  name == "String" ||
+  name == "Int" ||
+  name == "Float" ||
+  name == "Boolean" ||
+  name == "ID" ||
+  name == "__Schema" ||
+  name == "__Type" ||
+  name == "__TypeKind" ||
+  name == "__Field" ||
+  name == "__InputValue" ||
+  name == "__EnumValue" ||
+  name == "__Directive"
+}
+
+///|
+fn validate_schema_definitions(
+  schema : @ast.Document,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  for definition in schema.definitions {
+    guard definition is SchemaType(type_definition) else { continue }
+    match type_definition {
+      SchemaDefinition(definition) =>
+        validate_schema_root_types(definition, schema_info, errors)
+      ScalarType(_) => ()
+      ObjectType(definition) =>
+        validate_object_or_interface_definition(
+          definition.name,
+          "object",
+          definition.interfaces,
+          definition.fields,
+          schema_info,
+          errors,
+        )
+      InterfaceType(definition) =>
+        validate_object_or_interface_definition(
+          definition.name,
+          "interface",
+          definition.interfaces,
+          definition.fields,
+          schema_info,
+          errors,
+        )
+      UnionType(definition) =>
+        validate_union_definition(definition, schema_info, errors)
+      EnumType(definition) =>
+        validate_unique_enum_values(definition.name, definition.values, errors)
+      InputObjectType(definition) => {
+        validate_unique_input_value_names(
+          definition.name,
+          "input object",
+          definition.fields,
+          errors,
+        )
+        validate_input_value_types(
+          definition.fields,
+          "input field of input object \"\{definition.name}\"",
+          schema_info,
+          errors,
+        )
+      }
+      DirectiveDefinition(definition) => {
+        validate_unique_input_value_names(
+          definition.name,
+          "directive",
+          definition.arguments,
+          errors,
+        )
+        validate_input_value_types(
+          definition.arguments,
+          "argument of directive \"@\{definition.name}\"",
+          schema_info,
+          errors,
+        )
+        validate_unique_directive_locations(definition, errors)
+      }
+    }
+  }
+}
+
+///|
+fn validate_schema_root_types(
+  definition : @ast.SchemaDef,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  validate_schema_root_type("query", definition.query, schema_info, errors)
+  validate_schema_root_type(
+    "mutation",
+    definition.mutation,
+    schema_info,
+    errors,
+  )
+  validate_schema_root_type(
+    "subscription",
+    definition.subscription,
+    schema_info,
+    errors,
+  )
+}
+
+///|
+fn validate_schema_root_type(
+  operation : String,
+  type_name : String?,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  guard type_name is Some(name) else { return }
+  match schema_info.has_type.get(name) {
+    None =>
+      errors.push({
+        message: "Schema \{operation} root type \"\{name}\" is not defined",
+        ty: "error",
+      })
+    Some("object") => ()
+    Some(_) =>
+      errors.push({
+        message: "Schema \{operation} root type \"\{name}\" must be an object type",
+        ty: "error",
+      })
+  }
+}
+
+///|
+fn validate_object_or_interface_definition(
+  type_name : String,
+  kind : String,
+  interfaces : Array[String],
+  fields : Array[@ast.FieldDef],
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  validate_unique_field_names(type_name, kind, fields, errors)
+  validate_implemented_interfaces(
+    type_name, kind, interfaces, schema_info, errors,
+  )
+  for field in fields {
+    validate_output_type(
+      field.field_type,
+      "field \"\{field.name}\" of \{kind} type \"\{type_name}\"",
+      schema_info,
+      errors,
+    )
+    validate_unique_input_value_names(
+      field.name,
+      "field of \{kind} type \"\{type_name}\"",
+      field.arguments,
+      errors,
+    )
+    validate_input_value_types(
+      field.arguments,
+      "argument of field \"\{field.name}\" on \{kind} type \"\{type_name}\"",
+      schema_info,
+      errors,
+    )
+  }
+}
+
+///|
+fn validate_unique_field_names(
+  type_name : String,
+  kind : String,
+  fields : Array[@ast.FieldDef],
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for field in fields {
+    if seen.contains(field.name) {
+      errors.push({
+        message: "Duplicate field \"\{field.name}\" in \{kind} type \"\{type_name}\"",
+        ty: "error",
+      })
+    }
+    seen[field.name] = true
+  }
+}
+
+///|
+fn validate_implemented_interfaces(
+  type_name : String,
+  kind : String,
+  interfaces : Array[String],
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for interface_name in interfaces {
+    if seen.contains(interface_name) {
+      errors.push({
+        message: "Duplicate implemented interface \"\{interface_name}\" on \{kind} type \"\{type_name}\"",
+        ty: "error",
+      })
+    }
+    seen[interface_name] = true
+    match schema_info.has_type.get(interface_name) {
+      None =>
+        errors.push({
+          message: "Implemented interface \"\{interface_name}\" on \{kind} type \"\{type_name}\" is not defined",
+          ty: "error",
+        })
+      Some("interface") => ()
+      Some(_) =>
+        errors.push({
+          message: "Implemented type \"\{interface_name}\" on \{kind} type \"\{type_name}\" must be an interface",
+          ty: "error",
+        })
+    }
+  }
+}
+
+///|
+fn validate_union_definition(
+  definition : @ast.UnionTypeDef,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for member_name in definition.members {
+    if seen.contains(member_name) {
+      errors.push({
+        message: "Duplicate union member \"\{member_name}\" in union \"\{definition.name}\"",
+        ty: "error",
+      })
+    }
+    seen[member_name] = true
+    match schema_info.has_type.get(member_name) {
+      None =>
+        errors.push({
+          message: "Union member \"\{member_name}\" of union \"\{definition.name}\" is not defined",
+          ty: "error",
+        })
+      Some("object") => ()
+      Some(_) =>
+        errors.push({
+          message: "Union member \"\{member_name}\" of union \"\{definition.name}\" must be an object type",
+          ty: "error",
+        })
+    }
+  }
+}
+
+///|
+fn validate_unique_enum_values(
+  type_name : String,
+  values : Array[@ast.EnumValueDef],
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for value in values {
+    if seen.contains(value.name) {
+      errors.push({
+        message: "Duplicate enum value \"\{value.name}\" in enum type \"\{type_name}\"",
+        ty: "error",
+      })
+    }
+    seen[value.name] = true
+  }
+}
+
+///|
+fn validate_unique_input_value_names(
+  owner_name : String,
+  owner_kind : String,
+  values : Array[@ast.InputValueDef],
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for value in values {
+    if seen.contains(value.name) {
+      errors.push({
+        message: "Duplicate input value \"\{value.name}\" in \{owner_kind} \"\{owner_name}\"",
+        ty: "error",
+      })
+    }
+    seen[value.name] = true
+  }
+}
+
+///|
+fn validate_input_value_types(
+  values : Array[@ast.InputValueDef],
+  owner : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  for value in values {
+    validate_input_type(
+      value.input_type,
+      "\{owner} \"\{value.name}\"",
+      schema_info,
+      errors,
+    )
+  }
+}
+
+///|
+fn validate_input_type(
+  type_ref : @ast.TypeRef,
+  context : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  guard unwrap_type_name(type_ref) is Some(type_name) else { return }
+  match schema_info.has_type.get(type_name) {
+    None =>
+      errors.push({
+        message: "Input type \"\{type_ref_string(type_ref)}\" for \{context} is not defined",
+        ty: "error",
+      })
+    Some("scalar") | Some("enum") | Some("input-object") => ()
+    Some(_) =>
+      errors.push({
+        message: "Input type \"\{type_ref_string(type_ref)}\" for \{context} is not an input type",
+        ty: "error",
+      })
+  }
+}
+
+///|
+fn validate_output_type(
+  type_ref : @ast.TypeRef,
+  context : String,
+  schema_info : SchemaInfo,
+  errors : Array[ValidationError],
+) -> Unit {
+  guard unwrap_type_name(type_ref) is Some(type_name) else { return }
+  match schema_info.has_type.get(type_name) {
+    None =>
+      errors.push({
+        message: "Output type \"\{type_ref_string(type_ref)}\" for \{context} is not defined",
+        ty: "error",
+      })
+    Some(kind) =>
+      if !is_leaf_kind(kind) && !is_composite_kind(kind) {
+        errors.push({
+          message: "Output type \"\{type_ref_string(type_ref)}\" for \{context} is not an output type",
+          ty: "error",
+        })
+      }
+  }
+}
+
+///|
+fn validate_unique_directive_locations(
+  definition : @ast.DirectiveDef,
+  errors : Array[ValidationError],
+) -> Unit {
+  let seen : Map[String, Bool] = {}
+  for location in definition.locations {
+    if seen.contains(location) {
+      errors.push({
+        message: "Duplicate location \"\{location}\" in directive \"@\{definition.name}\"",
+        ty: "error",
+      })
+    }
+    seen[location] = true
+  }
+}
+
+///|
 pub fn validate_against_schema(
   doc : @ast.Document,
   schema : @ast.Document,
@@ -465,6 +901,9 @@ pub fn validate_against_schema(
     validate_named_fragment(
       name, schema_info, fragments, validating_fragments, validated_fragments, errors,
     )
+  }
+  for error in validate_schema(schema) {
+    errors.push(error)
   }
   errors
 }

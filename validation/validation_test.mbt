@@ -152,6 +152,133 @@ test "validate_against_schema with schema definition" {
 }
 
 ///|
+test "validate_schema accepts a structurally valid schema" {
+  let schema = @parser.parse(
+    (
+      #|interface Node { id: ID! }
+      #|type User implements Node { id: ID! name: String }
+      #|union SearchResult = User
+      #|input UserInput { name: String! }
+      #|type Query { user(input: UserInput): User search: SearchResult }
+      #|schema { query: Query }
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 0)
+}
+
+///|
+test "validate_schema rejects duplicate names inside definitions" {
+  let schema = @parser.parse(
+    (
+      #|type Query { user(id: ID, id: ID): String user: String }
+      #|input Filter { name: String name: String }
+      #|enum Role { USER USER }
+      #|type User { id: ID }
+      #|union SearchResult = User | User
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 5)
+  inspect(
+    errors[0].message(),
+    content="Duplicate field \"user\" in object type \"Query\"",
+  )
+  inspect(
+    errors[1].message(),
+    content="Duplicate input value \"id\" in field of object type \"Query\" \"user\"",
+  )
+  inspect(
+    errors[2].message(),
+    content="Duplicate input value \"name\" in input object \"Filter\"",
+  )
+  inspect(
+    errors[3].message(),
+    content="Duplicate enum value \"USER\" in enum type \"Role\"",
+  )
+  inspect(
+    errors[4].message(),
+    content="Duplicate union member \"User\" in union \"SearchResult\"",
+  )
+}
+
+///|
+test "validate_schema checks root types and union members" {
+  let schema = @parser.parse(
+    (
+      #|schema { query: Node mutation: Missing }
+      #|interface Node { id: ID }
+      #|type User { id: ID }
+      #|union SearchResult = User | Node | Missing
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 4)
+  inspect(
+    errors[0].message(),
+    content="Schema query root type \"Node\" must be an object type",
+  )
+  inspect(
+    errors[1].message(),
+    content="Schema mutation root type \"Missing\" is not defined",
+  )
+  inspect(
+    errors[2].message(),
+    content="Union member \"Node\" of union \"SearchResult\" must be an object type",
+  )
+  inspect(
+    errors[3].message(),
+    content="Union member \"Missing\" of union \"SearchResult\" is not defined",
+  )
+}
+
+///|
+test "validate_schema checks input output and implemented interface positions" {
+  let schema = @parser.parse(
+    (
+      #|scalar Token
+      #|type Query { user(filter: User): UserInput missing: Missing }
+      #|type User implements Token { id: ID }
+      #|input UserInput { owner: User }
+    ),
+  )
+  let errors = @validation.validate_schema(schema)
+  assert_eq(errors.length(), 5)
+  inspect(
+    errors[0].message(),
+    content="Output type \"UserInput\" for field \"user\" of object type \"Query\" is not an output type",
+  )
+  inspect(
+    errors[1].message(),
+    content="Input type \"User\" for argument of field \"user\" on object type \"Query\" \"filter\" is not an input type",
+  )
+  inspect(
+    errors[2].message(),
+    content="Output type \"Missing\" for field \"missing\" of object type \"Query\" is not defined",
+  )
+  inspect(
+    errors[3].message(),
+    content="Implemented type \"Token\" on object type \"User\" must be an interface",
+  )
+  inspect(
+    errors[4].message(),
+    content="Input type \"User\" for input field of input object \"UserInput\" \"owner\" is not an input type",
+  )
+}
+
+///|
+test "validate_against_schema includes schema validation errors" {
+  let schema = @parser.parse("type Query { greeting: String greeting: String }")
+  let doc = @parser.parse("{ greeting }")
+  let errors = @validation.validate_against_schema(doc, schema)
+  assert_eq(errors.length(), 1)
+  inspect(
+    errors[0].message(),
+    content="Duplicate field \"greeting\" in object type \"Query\"",
+  )
+}
+
+///|
 test "validate_against_schema __typename is allowed" {
   let schema_input =
     #|type Query { hero: Hero }
