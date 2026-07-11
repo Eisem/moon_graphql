@@ -20,6 +20,9 @@ jobs:
       - name: Check
         run: moon check --deny-warn
 
+      - name: Build
+        run: moon build --deny-warn
+
       - name: Format check
         run: moon fmt --check
 
