@@ -18,7 +18,7 @@ GraphQL 的解析器、AST 和验证器是服务器、客户端与开发工具�
 - 同时覆盖 GraphQL 查询语言和 Schema Definition Language（SDL）；
 - 支持 `parse → validate → print` 完整语言处理流程；
 - 对数字、Unicode 字符串、Block String、Fragment、Union、变量和输入值进行规范化检查；
-- 提供 153 个自动化测试及 GitHub Actions CI；
+- 提供 158 个自动化测试及 GitHub Actions CI；
 - 提供基于 MoonBit 官方 `moon bench` 的 parse/validate/print 性能回归基线；
 - 明确记录已支持、部分支持和暂未实现的规范能力，避免模糊的“完整支持”声明。
 
@@ -133,7 +133,7 @@ moon run cmd/format -- --check "{ hero { name } }"
 moon run cmd/lint -- "{ hero { ...missing } }"
 ```
 
-这两个命令展示了 `parser`、`printer` 和 `validation` 包如何组合成实际开发工具。当前 Linter 进行文档级检查；带 Schema 的查询检查仍可通过库 API `validate_against_schema` 完成。
+`cmd/format -- --check` 在文档需要格式化时会以非零状态退出；`cmd/lint` 在解析或验证失败时也会以非零状态退出，因此两个工具可以直接用于 pre-commit hook 或 CI。当前 Linter 进行文档级检查；带 Schema 的查询检查仍可通过库 API `validate_against_schema` 完成。
 
 ## 已实现能力
 

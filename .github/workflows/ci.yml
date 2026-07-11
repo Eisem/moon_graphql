@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install MoonBit
         run: |
@@ -30,4 +30,17 @@ jobs:
         run: moon info
 
       - name: Test
-        run: moon test
+        run: moon test --deny-warn
+
+      - name: CLI smoke tests
+        run: |
+          moon run cmd/main
+          moon run cmd/format -- "{ hero { name } }"
+          if moon run cmd/format -- --check "{ hero { name } }"; then
+            echo "format --check should fail for unformatted input"
+            exit 1
+          fi
+          if moon run cmd/lint -- "{ hero { ...missing } }"; then
+            echo "lint should fail for an undefined fragment"
+            exit 1
+          fi

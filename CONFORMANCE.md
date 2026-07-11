@@ -1,4 +1,4 @@
-# GraphQL conformance
+# GraphQL 规范覆盖矩阵 / Conformance
 
 `moon_graphql` currently targets the [GraphQL Specification, October 2021 Edition](https://spec.graphql.org/October2021/). This document separates implemented syntax support from semantic validation and runtime features so users can evaluate the library without assuming full GraphQL server support.
 

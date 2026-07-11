@@ -23,7 +23,7 @@ fn main {
   let document = @parser.parse(input) catch {
     error => {
       println("解析失败: \{error}")
-      return
+      @abort.abort("无法格式化无效的 GraphQL 文档")
     }
   }
   let formatted = @printer.print(document)
@@ -33,6 +33,7 @@ fn main {
     } else {
       println("格式检查失败，格式化结果如下：")
       println(formatted)
+      @abort.abort("GraphQL 文档未按规范格式化")
     }
   } else {
     println(formatted)

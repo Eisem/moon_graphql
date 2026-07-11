@@ -20,7 +20,7 @@ fn main {
   let document = @parser.parse(collect_input(args[1:])) catch {
     error => {
       println("解析失败: \{error}")
-      return
+      @abort.abort("无法检查无效的 GraphQL 文档")
     }
   }
   let errors = @validation.validate(document)
@@ -31,5 +31,6 @@ fn main {
     for error in errors {
       println("- \{error.message()}")
     }
+    @abort.abort("Lint 检查失败")
   }
 }

@@ -1,4 +1,5 @@
 import {
+  "moonbitlang/core/abort",
   "eisem/moon_graphql/parser",
   "eisem/moon_graphql/validation",
   "moonbitlang/core/env",
